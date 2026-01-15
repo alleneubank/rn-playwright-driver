@@ -57,7 +57,7 @@ export class R3FLocator {
 
 	/**
 	 * Get the object's screen position (center point).
-	 * @throws Error if object not found, off-screen, or outside frustum
+	 * @throws Error if object not found, outside frustum, or off-screen
 	 */
 	async screenPosition(): Promise<R3FScreenPosition> {
 		const methodName = `getObjectScreenPosition${this.methodSuffix}`;
@@ -68,11 +68,12 @@ export class R3FLocator {
 		if (!pos) {
 			throw new Error(`R3F object not found (${this.method}): ${this.identifier}`);
 		}
-		if (!pos.isOnScreen) {
-			throw new Error(`R3F object is off-screen: ${this.identifier}`);
-		}
+		// Check frustum first - isOnScreen requires isInFrustum, so this error is more specific
 		if (!pos.isInFrustum) {
 			throw new Error(`R3F object is outside camera frustum: ${this.identifier}`);
+		}
+		if (!pos.isOnScreen) {
+			throw new Error(`R3F object is off-screen: ${this.identifier}`);
 		}
 
 		return pos;
@@ -128,10 +129,11 @@ export class R3FLocator {
 	 */
 	async exists(): Promise<boolean> {
 		const methodName = `getObjectInfo${this.methodSuffix}`;
-		const info = await this.device.evaluate<R3FObjectInfo | null>(
+		const info = await this.device.evaluate<R3FObjectInfo | null | undefined>(
 			`${this.bridge}?.${methodName}(${JSON.stringify(this.identifier)})`,
 		);
-		return info !== null;
+		// Use != null to catch both null (not found) and undefined (bridge missing)
+		return info != null;
 	}
 }
 
@@ -146,7 +148,8 @@ export type R3FDeviceNamespace = {
 
 	/**
 	 * Get a locator for an object by its name.
-	 * Note: Returns null if multiple objects have the same name.
+	 * Note: The underlying bridge returns null if multiple objects share the name,
+	 * so locator methods will throw "not found" for ambiguous names.
 	 */
 	getByName(name: string, canvasId?: string): R3FLocator;
 

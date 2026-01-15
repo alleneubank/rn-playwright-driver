@@ -1,9 +1,13 @@
 // @0xbigboss/rn-driver-r3f - R3F integration for rn-playwright-driver
+//
+// This entry point is safe for app-side (Metro) imports.
+// For Playwright test fixtures with device.r3f namespace,
+// import from '@0xbigboss/rn-driver-r3f/test' instead.
 
-// --- Helpers (test-side) ---
+// --- Helpers (test-side, but no Playwright dependency) ---
 export type { LookupMethod, R3FLookupOptions } from "./helpers";
 export { getR3FObjectPosition, tapR3FObject, verifyHitTarget } from "./helpers";
-// --- Locator (test-side) ---
+// --- Locator (test-side, but no Playwright dependency) ---
 export type { R3FDeviceNamespace } from "./locator";
 export { createR3FNamespace, R3FLocator } from "./locator";
 export type { R3FTouchAdapterProps } from "./R3FTouchAdapter";
@@ -11,10 +15,6 @@ export { R3FTouchAdapter } from "./R3FTouchAdapter";
 // --- Components (app-side) ---
 export type { TestBridgeProps } from "./TestBridge";
 export { TestBridge } from "./TestBridge";
-
-// --- Device Extension ---
-export type { R3FDevice, R3FTestFixtures } from "./test";
-export { withR3F } from "./test";
 
 // --- Types ---
 export type {
