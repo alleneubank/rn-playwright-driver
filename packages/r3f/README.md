@@ -195,7 +195,7 @@ Or wrap the device manually:
 
 ```typescript
 import { test } from "@0xbigboss/rn-playwright-driver/test";
-import { withR3F } from "@0xbigboss/rn-driver-r3f";
+import { withR3F } from "@0xbigboss/rn-driver-r3f/test";
 
 test("tap object", async ({ device: baseDevice }) => {
   const device = withR3F(baseDevice);
