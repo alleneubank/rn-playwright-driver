@@ -21,8 +21,11 @@
  */
 
 import type { TouchEvent } from "@0xbigboss/rn-playwright-driver/harness";
+import type { ThreeEvent } from "@react-three/fiber";
 import { useThree } from "@react-three/fiber";
 import { useEffect, useRef } from "react";
+import type { Camera, Intersection, Object3D } from "three";
+import { Vector2 } from "three";
 
 export type R3FTouchAdapterProps = {
 	/**
@@ -33,40 +36,32 @@ export type R3FTouchAdapterProps = {
 };
 
 /**
- * Map harness touch event types to R3F handler names.
+ * Track captured objects for pointer routing.
+ * Maps pointerId -> captured object info.
  */
-const TOUCH_TYPE_TO_HANDLER = {
-	down: "onPointerDown",
-	move: "onPointerMove",
-	up: "onPointerUp",
-} as const;
-
-/**
- * Create a synthetic DOM-like PointerEvent that R3F's event system expects.
- *
- * R3F's event handlers read offsetX/offsetY to compute NDC coordinates,
- * then do raycasting and call the appropriate React handlers on hit objects.
- */
-/**
- * Mock target element for pointer capture.
- * R3F calls setPointerCapture/releasePointerCapture during drag operations.
- */
-const mockTarget = {
-	setPointerCapture: (_pointerId: number) => {
-		// No-op: pointer capture is handled by R3F's internal state
-	},
-	releasePointerCapture: (_pointerId: number) => {
-		// No-op: pointer release is handled by R3F's internal state
-	},
+type CaptureInfo = {
+	object: Object3D;
+	intersection: Intersection;
 };
 
-function createSyntheticPointerEvent(touchEvent: TouchEvent, pointerId: number): PointerEvent {
-	let defaultPrevented = false;
+/**
+ * Create a synthetic R3F-style pointer event with all required properties.
+ * This event can be passed directly to React handlers (onPointerDown, etc.).
+ */
+function createR3FPointerEvent(
+	touchEvent: TouchEvent,
+	pointerId: number,
+	intersection: Intersection,
+	captureMap: Map<number, CaptureInfo>,
+): ThreeEvent<PointerEvent> {
+	let stopped = false;
 
-	// Create a minimal PointerEvent-like object that R3F's event system expects.
-	// R3F reads offsetX/offsetY to compute NDC, then does raycasting.
 	const event = {
-		// Position in canvas coordinates (R3F uses offsetX/offsetY)
+		// Intersection data
+		...intersection,
+		eventObject: intersection.object,
+
+		// Screen coordinates
 		offsetX: touchEvent.x,
 		offsetY: touchEvent.y,
 		clientX: touchEvent.x,
@@ -79,65 +74,152 @@ function createSyntheticPointerEvent(touchEvent: TouchEvent, pointerId: number):
 		pointerType: "touch" as const,
 		isPrimary: true,
 
-		// Button state (0 = left/primary button)
+		// Button state
 		button: 0,
 		buttons: touchEvent.type === "up" ? 0 : 1,
 
-		// Target element with pointer capture methods (required for drag operations)
-		target: mockTarget,
-		currentTarget: mockTarget,
+		// Capture methods that update our tracking map
+		target: {
+			setPointerCapture: (id: number) => {
+				captureMap.set(id, { object: intersection.object, intersection });
+			},
+			releasePointerCapture: (id: number) => {
+				captureMap.delete(id);
+			},
+			hasPointerCapture: (id: number) => captureMap.has(id),
+		},
+		currentTarget: {
+			setPointerCapture: (id: number) => {
+				captureMap.set(id, { object: intersection.object, intersection });
+			},
+			releasePointerCapture: (id: number) => {
+				captureMap.delete(id);
+			},
+			hasPointerCapture: (id: number) => captureMap.has(id),
+		},
 
-		// Event control methods
+		// Event control
 		stopPropagation: () => {
-			// R3F calls this to stop event propagation
+			stopped = true;
 		},
-		preventDefault: () => {
-			defaultPrevented = true;
+		get stopped() {
+			return stopped;
 		},
-		get defaultPrevented() {
-			return defaultPrevented;
-		},
+		preventDefault: () => {},
+		defaultPrevented: false,
+		nativeEvent: {} as PointerEvent,
 	};
 
-	return event as unknown as PointerEvent;
+	return event as unknown as ThreeEvent<PointerEvent>;
 }
 
 export function R3FTouchAdapter({ id }: R3FTouchAdapterProps): null {
-	// Access R3F's internal event handlers via useThree
-	// events.handlers contains onPointerDown, onPointerMove, onPointerUp, etc.
-	const events = useThree((state) => state.events);
+	// Access R3F state for raycasting
+	const { camera, raycaster, scene, size } = useThree();
 
 	// Track active pointer ID for gesture continuity
 	const pointerIdRef = useRef<number>(1);
 
+	// Track captured objects ourselves since R3F's internal capture
+	// system doesn't work with synthetic events
+	const captureMapRef = useRef<Map<number, CaptureInfo>>(new Map());
+
 	useEffect(() => {
 		if (!globalThis.__RN_DRIVER__) return;
 
-		const handler = (touchEvent: TouchEvent): void => {
-			// Get the appropriate R3F handler based on touch event type
-			const handlerName = TOUCH_TYPE_TO_HANDLER[touchEvent.type];
-			const r3fHandler = events.handlers?.[handlerName];
+		const { width, height } = size;
 
-			if (!r3fHandler) {
-				// R3F events not initialized yet
-				return;
+		/**
+		 * Convert screen coords to NDC for raycasting.
+		 */
+		const screenToNdc = (x: number, y: number): Vector2 =>
+			new Vector2((x / width) * 2 - 1, -(y / height) * 2 + 1);
+
+		/**
+		 * Find objects with R3F event handlers via raycasting.
+		 */
+		const findHitObjects = (x: number, y: number): Intersection[] => {
+			const ndc = screenToNdc(x, y);
+			raycaster.setFromCamera(ndc, camera as Camera);
+			return raycaster.intersectObjects(scene.children, true);
+		};
+
+		/**
+		 * Find the R3F handler on an object or its ancestors.
+		 */
+		const findHandler = (
+			object: Object3D,
+			handlerName: string,
+		): ((event: ThreeEvent<PointerEvent>) => void) | null => {
+			let current: Object3D | null = object;
+			while (current) {
+				const r3f = (current as Object3D & { __r3f?: { handlers?: Record<string, unknown> } })
+					.__r3f;
+				if (r3f?.handlers?.[handlerName]) {
+					return r3f.handlers[handlerName] as (event: ThreeEvent<PointerEvent>) => void;
+				}
+				current = current.parent;
+			}
+			return null;
+		};
+
+		const handler = (touchEvent: TouchEvent): void => {
+			const pointerId = pointerIdRef.current;
+			const captureMap = captureMapRef.current;
+
+			// For pointerup/pointermove, check if this pointer is captured
+			const captured = captureMap.get(pointerId);
+
+			if (touchEvent.type === "up" || touchEvent.type === "move") {
+				if (captured) {
+					// Route to captured object
+					const handlerName = touchEvent.type === "up" ? "onPointerUp" : "onPointerMove";
+					const objectHandler = findHandler(captured.object, handlerName);
+
+					if (objectHandler) {
+						const event = createR3FPointerEvent(
+							touchEvent,
+							pointerId,
+							captured.intersection,
+							captureMap,
+						);
+						objectHandler(event);
+					}
+
+					// Clean up capture on pointer up
+					if (touchEvent.type === "up") {
+						captureMap.delete(pointerId);
+						pointerIdRef.current += 1;
+					}
+					return;
+				}
 			}
 
-			// Use consistent pointer ID for the gesture
-			const pointerId = pointerIdRef.current;
+			// For pointerdown (or uncaptured move/up), do raycasting
+			const hits = findHitObjects(touchEvent.x, touchEvent.y);
+			if (hits.length === 0) return;
 
-			// Create synthetic event that R3F's event system expects
-			const syntheticEvent = createSyntheticPointerEvent(touchEvent, pointerId);
+			const handlerName =
+				touchEvent.type === "down"
+					? "onPointerDown"
+					: touchEvent.type === "up"
+						? "onPointerUp"
+						: "onPointerMove";
 
-			// Call R3F's internal event handler
-			// This triggers R3F's full event flow:
-			// 1. compute() converts offsetX/offsetY to NDC
-			// 2. raycaster.setFromCamera() sets up the ray
-			// 3. intersect() finds hit objects
-			// 4. onIntersect() calls React handlers (onPointerDown, etc.)
-			r3fHandler(syntheticEvent as PointerEvent);
+			// Find first object with the appropriate handler
+			for (const hit of hits) {
+				const objectHandler = findHandler(hit.object, handlerName);
+				if (objectHandler) {
+					const event = createR3FPointerEvent(touchEvent, pointerId, hit, captureMap);
+					objectHandler(event);
 
-			// Increment pointer ID after up event for next gesture
+					// Stop after first handler (event didn't propagate)
+					if (event.stopped) break;
+					break; // Only call first matching handler
+				}
+			}
+
+			// Increment pointer ID after uncaptured up event
 			if (touchEvent.type === "up") {
 				pointerIdRef.current += 1;
 			}
@@ -150,7 +232,7 @@ export function R3FTouchAdapter({ id }: R3FTouchAdapterProps): null {
 		return () => {
 			globalThis.__RN_DRIVER__?.unregisterTouchHandler(handlerKey);
 		};
-	}, [events, id]);
+	}, [camera, raycaster, scene, size, id]);
 
 	return null;
 }
