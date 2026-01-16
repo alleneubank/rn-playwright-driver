@@ -1,5 +1,8 @@
 /**
- * R3FTouchAdapter - Routes harness touch events through R3F raycasting
+ * R3FTouchAdapter - Routes harness touch events through R3F's internal event system
+ *
+ * This adapter bridges the rn-playwright-driver harness pointer events to R3F's
+ * pointer event system by calling R3F's internal event handlers directly.
  *
  * @example
  * ```tsx
@@ -19,9 +22,7 @@
 
 import type { TouchEvent } from "@0xbigboss/rn-playwright-driver/harness";
 import { useThree } from "@react-three/fiber";
-import { useEffect } from "react";
-import type { Camera, PerspectiveCamera } from "three";
-import { Vector2 } from "three";
+import { useEffect, useRef } from "react";
 
 export type R3FTouchAdapterProps = {
 	/**
@@ -31,50 +32,97 @@ export type R3FTouchAdapterProps = {
 	id?: string;
 };
 
+/**
+ * Map harness touch event types to R3F handler names.
+ */
+const TOUCH_TYPE_TO_HANDLER = {
+	down: "onPointerDown",
+	move: "onPointerMove",
+	up: "onPointerUp",
+} as const;
+
+/**
+ * Create a synthetic DOM-like PointerEvent that R3F's event system expects.
+ *
+ * R3F's event handlers read offsetX/offsetY to compute NDC coordinates,
+ * then do raycasting and call the appropriate React handlers on hit objects.
+ */
+function createSyntheticPointerEvent(touchEvent: TouchEvent, pointerId: number): PointerEvent {
+	let defaultPrevented = false;
+
+	// Create a minimal PointerEvent-like object that R3F's event system expects.
+	// R3F reads offsetX/offsetY to compute NDC, then does raycasting.
+	const event = {
+		// Position in canvas coordinates (R3F uses offsetX/offsetY)
+		offsetX: touchEvent.x,
+		offsetY: touchEvent.y,
+		clientX: touchEvent.x,
+		clientY: touchEvent.y,
+		pageX: touchEvent.x,
+		pageY: touchEvent.y,
+
+		// Pointer identification
+		pointerId,
+		pointerType: "touch" as const,
+		isPrimary: true,
+
+		// Button state (0 = left/primary button)
+		button: 0,
+		buttons: touchEvent.type === "up" ? 0 : 1,
+
+		// Event control methods
+		stopPropagation: () => {
+			// R3F calls this to stop event propagation
+		},
+		preventDefault: () => {
+			defaultPrevented = true;
+		},
+		get defaultPrevented() {
+			return defaultPrevented;
+		},
+	};
+
+	return event as unknown as PointerEvent;
+}
+
 export function R3FTouchAdapter({ id }: R3FTouchAdapterProps): null {
-	const { camera, raycaster, scene, size } = useThree();
+	// Access R3F's internal event handlers via useThree
+	// events.handlers contains onPointerDown, onPointerMove, onPointerUp, etc.
+	const events = useThree((state) => state.events);
+
+	// Track active pointer ID for gesture continuity
+	const pointerIdRef = useRef<number>(1);
 
 	useEffect(() => {
 		if (!globalThis.__RN_DRIVER__) return;
 
-		const { width, height } = size;
+		const handler = (touchEvent: TouchEvent): void => {
+			// Get the appropriate R3F handler based on touch event type
+			const handlerName = TOUCH_TYPE_TO_HANDLER[touchEvent.type];
+			const r3fHandler = events.handlers?.[handlerName];
 
-		/**
-		 * Convert screen coords to NDC using R3F state.size.
-		 */
-		const screenToNdc = (x: number, y: number): Vector2 =>
-			new Vector2((x / width) * 2 - 1, -(y / height) * 2 + 1);
-
-		const handler = (event: TouchEvent): void => {
-			const ndc = screenToNdc(event.x, event.y);
-
-			scene.updateMatrixWorld(true);
-			camera.updateMatrixWorld();
-			if ("updateProjectionMatrix" in camera) {
-				(camera as PerspectiveCamera).updateProjectionMatrix();
+			if (!r3fHandler) {
+				// R3F events not initialized yet
+				return;
 			}
 
-			raycaster.setFromCamera(ndc, camera as Camera);
-			const intersects = raycaster.intersectObjects(scene.children, true);
+			// Use consistent pointer ID for the gesture
+			const pointerId = pointerIdRef.current;
 
-			if (intersects.length > 0) {
-				const hit = intersects[0];
-				const eventType =
-					event.type === "down" ? "pointerdown" : event.type === "up" ? "pointerup" : "pointermove";
+			// Create synthetic event that R3F's event system expects
+			const syntheticEvent = createSyntheticPointerEvent(touchEvent, pointerId);
 
-				// Dispatch R3F-style pointer event
-				// Note: Three.js Object3D.dispatchEvent is generic; R3F extends the event types
-				// at runtime but TypeScript doesn't know about them, so we cast via unknown.
-				hit.object.dispatchEvent({
-					type: eventType,
-					point: hit.point,
-					distance: hit.distance,
-					object: hit.object,
-					clientX: event.x,
-					clientY: event.y,
-					pageX: event.x,
-					pageY: event.y,
-				} as unknown as Parameters<typeof hit.object.dispatchEvent>[0]);
+			// Call R3F's internal event handler
+			// This triggers R3F's full event flow:
+			// 1. compute() converts offsetX/offsetY to NDC
+			// 2. raycaster.setFromCamera() sets up the ray
+			// 3. intersect() finds hit objects
+			// 4. onIntersect() calls React handlers (onPointerDown, etc.)
+			r3fHandler(syntheticEvent as PointerEvent);
+
+			// Increment pointer ID after up event for next gesture
+			if (touchEvent.type === "up") {
+				pointerIdRef.current += 1;
 			}
 		};
 
@@ -85,7 +133,7 @@ export function R3FTouchAdapter({ id }: R3FTouchAdapterProps): null {
 		return () => {
 			globalThis.__RN_DRIVER__?.unregisterTouchHandler(handlerKey);
 		};
-	}, [camera, raycaster, scene, size, id]);
+	}, [events, id]);
 
 	return null;
 }

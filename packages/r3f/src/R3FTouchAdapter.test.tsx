@@ -1,8 +1,8 @@
 /**
  * Unit tests for R3FTouchAdapter
  *
- * These tests verify that touch events dispatched to R3F objects
- * include the necessary screen coordinates for drag handling.
+ * These tests verify that touch events are routed to R3F's internal
+ * event handlers with the correct synthetic PointerEvent properties.
  */
 
 import type {
@@ -10,12 +10,13 @@ import type {
 	TouchEvent,
 	TouchHandler,
 } from "@0xbigboss/rn-playwright-driver/harness";
-import type { Camera, Object3D, Raycaster, Scene } from "three";
-import { Vector3 } from "three";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // Track cleanup functions from useEffect
 let effectCleanup: (() => void) | undefined;
+
+// Track ref value
+let refValue = { current: 1 };
 
 // Mock React
 vi.mock("react", () => ({
@@ -24,6 +25,10 @@ vi.mock("react", () => ({
 		if (typeof cleanup === "function") {
 			effectCleanup = cleanup;
 		}
+	}),
+	useRef: vi.fn((initial: number) => {
+		refValue = { current: initial };
+		return refValue;
 	}),
 }));
 
@@ -38,55 +43,46 @@ import { R3FTouchAdapter } from "./R3FTouchAdapter";
 
 describe("R3FTouchAdapter", () => {
 	let capturedHandler: TouchHandler | null = null;
-	let dispatchedEvents: Array<Record<string, unknown>> = [];
-	let mockObject: Partial<Object3D>;
-	let mockRaycaster: Partial<Raycaster>;
-	let mockScene: Partial<Scene>;
-	let mockCamera: Partial<Camera>;
+	let r3fHandlerCalls: Array<{ name: string; event: PointerEvent }> = [];
 	let mockDriver: Partial<RNDriverGlobal>;
+	let mockEvents: {
+		handlers: {
+			onPointerDown: (e: PointerEvent) => void;
+			onPointerMove: (e: PointerEvent) => void;
+			onPointerUp: (e: PointerEvent) => void;
+		};
+	};
 
 	beforeEach(() => {
 		capturedHandler = null;
-		dispatchedEvents = [];
+		r3fHandlerCalls = [];
 		effectCleanup = undefined;
+		refValue = { current: 1 };
 
-		// Create mock object that captures dispatched events
-		mockObject = {
-			dispatchEvent: vi.fn((event) => {
-				dispatchedEvents.push(event as Record<string, unknown>);
-			}),
+		// Create mock R3F event handlers that capture calls
+		mockEvents = {
+			handlers: {
+				onPointerDown: vi.fn((e: PointerEvent) => {
+					r3fHandlerCalls.push({ name: "onPointerDown", event: e });
+				}),
+				onPointerMove: vi.fn((e: PointerEvent) => {
+					r3fHandlerCalls.push({ name: "onPointerMove", event: e });
+				}),
+				onPointerUp: vi.fn((e: PointerEvent) => {
+					r3fHandlerCalls.push({ name: "onPointerUp", event: e });
+				}),
+			},
 		};
 
-		// Create mock raycaster that returns our mock object as a hit
-		mockRaycaster = {
-			setFromCamera: vi.fn(),
-			intersectObjects: vi.fn().mockReturnValue([
-				{
-					point: new Vector3(1, 2, 3),
-					distance: 10,
-					object: mockObject,
-				},
-			]),
-		};
-
-		// Create mock scene
-		mockScene = {
-			updateMatrixWorld: vi.fn(),
-			children: [],
-		};
-
-		// Create mock camera
-		mockCamera = {
-			updateMatrixWorld: vi.fn(),
-		};
-
-		// Mock useThree to return our mocks
-		vi.mocked(useThree).mockReturnValue({
-			camera: mockCamera as Camera,
-			raycaster: mockRaycaster as Raycaster,
-			scene: mockScene as Scene,
-			size: { width: 400, height: 800, left: 0, top: 0 },
-		} as ReturnType<typeof useThree>);
+		// Mock useThree to return events based on selector
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		vi.mocked(useThree).mockImplementation(((selector?: (state: unknown) => unknown) => {
+			const state = { events: mockEvents };
+			if (selector) {
+				return selector(state);
+			}
+			return state;
+		}) as typeof useThree);
 
 		// Create mock driver that captures the registered handler
 		mockDriver = {
@@ -107,15 +103,12 @@ describe("R3FTouchAdapter", () => {
 		delete (globalThis as { __RN_DRIVER__?: unknown }).__RN_DRIVER__;
 	});
 
-	it("includes clientX/clientY in dispatched pointer events", () => {
-		// Render the component (this registers the handler via mocked useEffect)
+	it("calls R3F onPointerDown handler with correct event properties", () => {
 		R3FTouchAdapter({});
 
-		// Verify handler was registered
 		expect(mockDriver.registerTouchHandler).toHaveBeenCalledWith("r3f", expect.any(Function));
 		expect(capturedHandler).not.toBeNull();
 
-		// Simulate a touch event
 		const touchEvent: TouchEvent = {
 			x: 200,
 			y: 400,
@@ -124,16 +117,19 @@ describe("R3FTouchAdapter", () => {
 		};
 		capturedHandler!(touchEvent);
 
-		// Verify event was dispatched with screen coordinates
-		expect(dispatchedEvents).toHaveLength(1);
-		const dispatched = dispatchedEvents[0];
+		expect(r3fHandlerCalls).toHaveLength(1);
+		expect(r3fHandlerCalls[0].name).toBe("onPointerDown");
 
-		expect(dispatched.type).toBe("pointerdown");
-		expect(dispatched.clientX).toBe(200);
-		expect(dispatched.clientY).toBe(400);
+		const event = r3fHandlerCalls[0].event;
+		expect(event.offsetX).toBe(200);
+		expect(event.offsetY).toBe(400);
+		expect(event.clientX).toBe(200);
+		expect(event.clientY).toBe(400);
+		expect(event.pointerId).toBe(1);
+		expect(event.pointerType).toBe("touch");
 	});
 
-	it("includes pageX/pageY in dispatched pointer events", () => {
+	it("calls R3F onPointerMove handler for move events", () => {
 		R3FTouchAdapter({});
 
 		const touchEvent: TouchEvent = {
@@ -144,15 +140,15 @@ describe("R3FTouchAdapter", () => {
 		};
 		capturedHandler!(touchEvent);
 
-		expect(dispatchedEvents).toHaveLength(1);
-		const dispatched = dispatchedEvents[0];
+		expect(r3fHandlerCalls).toHaveLength(1);
+		expect(r3fHandlerCalls[0].name).toBe("onPointerMove");
 
-		expect(dispatched.type).toBe("pointermove");
-		expect(dispatched.pageX).toBe(150);
-		expect(dispatched.pageY).toBe(300);
+		const event = r3fHandlerCalls[0].event;
+		expect(event.offsetX).toBe(150);
+		expect(event.offsetY).toBe(300);
 	});
 
-	it("preserves world coordinates alongside screen coordinates", () => {
+	it("calls R3F onPointerUp handler for up events", () => {
 		R3FTouchAdapter({});
 
 		const touchEvent: TouchEvent = {
@@ -163,40 +159,69 @@ describe("R3FTouchAdapter", () => {
 		};
 		capturedHandler!(touchEvent);
 
-		expect(dispatchedEvents).toHaveLength(1);
-		const dispatched = dispatchedEvents[0];
+		expect(r3fHandlerCalls).toHaveLength(1);
+		expect(r3fHandlerCalls[0].name).toBe("onPointerUp");
 
-		// Screen coordinates
-		expect(dispatched.clientX).toBe(100);
-		expect(dispatched.clientY).toBe(200);
-
-		// World coordinates from raycast hit
-		expect(dispatched.point).toEqual(new Vector3(1, 2, 3));
-		expect(dispatched.distance).toBe(10);
-		expect(dispatched.object).toBe(mockObject);
+		const event = r3fHandlerCalls[0].event;
+		expect(event.offsetX).toBe(100);
+		expect(event.offsetY).toBe(200);
 	});
 
-	it("maps touch event types to pointer event types correctly", () => {
+	it("includes button state in synthetic events", () => {
 		R3FTouchAdapter({});
 
-		// Test all three event types
+		// Button down during pointer down
 		capturedHandler!({ x: 0, y: 0, type: "down", timestamp: Date.now() });
-		capturedHandler!({ x: 0, y: 0, type: "move", timestamp: Date.now() });
-		capturedHandler!({ x: 0, y: 0, type: "up", timestamp: Date.now() });
+		expect(r3fHandlerCalls[0].event.buttons).toBe(1);
+		expect(r3fHandlerCalls[0].event.button).toBe(0);
 
-		expect(dispatchedEvents).toHaveLength(3);
-		expect(dispatchedEvents[0].type).toBe("pointerdown");
-		expect(dispatchedEvents[1].type).toBe("pointermove");
-		expect(dispatchedEvents[2].type).toBe("pointerup");
+		// Button still down during move
+		capturedHandler!({ x: 10, y: 10, type: "move", timestamp: Date.now() });
+		expect(r3fHandlerCalls[1].event.buttons).toBe(1);
+
+		// Button released on up
+		capturedHandler!({ x: 10, y: 10, type: "up", timestamp: Date.now() });
+		expect(r3fHandlerCalls[2].event.buttons).toBe(0);
 	});
 
-	it("does not dispatch events when no objects are hit", () => {
-		// Configure raycaster to return no hits
-		vi.mocked(mockRaycaster.intersectObjects!).mockReturnValue([]);
+	it("increments pointer ID after up event for gesture tracking", () => {
+		R3FTouchAdapter({});
+
+		// First gesture
+		capturedHandler!({ x: 0, y: 0, type: "down", timestamp: Date.now() });
+		expect(r3fHandlerCalls[0].event.pointerId).toBe(1);
+
+		capturedHandler!({ x: 10, y: 10, type: "up", timestamp: Date.now() });
+		expect(r3fHandlerCalls[1].event.pointerId).toBe(1);
+
+		// Second gesture should have incremented pointer ID
+		capturedHandler!({ x: 20, y: 20, type: "down", timestamp: Date.now() });
+		expect(r3fHandlerCalls[2].event.pointerId).toBe(2);
+	});
+
+	it("does not call handlers when events object has no handlers", () => {
+		// Mock events without handlers
+		vi.mocked(useThree).mockImplementation(((selector?: (state: unknown) => unknown) => {
+			const state = { events: { handlers: undefined } };
+			if (selector) {
+				return selector(state);
+			}
+			return state;
+		}) as typeof useThree);
 
 		R3FTouchAdapter({});
 		capturedHandler!({ x: 100, y: 200, type: "down", timestamp: Date.now() });
 
-		expect(dispatchedEvents).toHaveLength(0);
+		// No handlers should be called
+		expect(r3fHandlerCalls).toHaveLength(0);
+	});
+
+	it("registers with custom id for multi-canvas support", () => {
+		R3FTouchAdapter({ id: "secondary" });
+
+		expect(mockDriver.registerTouchHandler).toHaveBeenCalledWith(
+			"r3f:secondary",
+			expect.any(Function),
+		);
 	});
 });
