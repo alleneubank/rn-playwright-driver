@@ -323,4 +323,60 @@ describe("R3FTouchAdapter", () => {
 		// Only 2 calls - the third down didn't hit anything
 		expect(handlerCalls).toHaveLength(2);
 	});
+
+	it("routes events to parent handler when raycast hits child without handlers", () => {
+		// Create parent with handlers and child without handlers
+		const parentObject: Partial<Object3D> & { __r3f?: { handlers?: Record<string, unknown> } } = {
+			parent: null,
+			__r3f: {
+				handlers: {
+					onPointerDown: vi.fn((e: ThreeEvent<PointerEvent>) => {
+						handlerCalls.push({ name: "onPointerDown", event: e });
+					}),
+					onPointerMove: vi.fn((e: ThreeEvent<PointerEvent>) => {
+						handlerCalls.push({ name: "onPointerMove", event: e });
+					}),
+					onPointerUp: vi.fn((e: ThreeEvent<PointerEvent>) => {
+						handlerCalls.push({ name: "onPointerUp", event: e });
+					}),
+				},
+			},
+		};
+
+		const childObject: Partial<Object3D> = {
+			parent: parentObject as Object3D,
+			// No __r3f handlers - events should bubble to parent
+		};
+
+		// Raycaster hits the child (not the parent)
+		mockRaycaster.intersectObjects.mockReturnValue([
+			{
+				point: new Vector3(1, 2, 3),
+				distance: 10,
+				object: childObject,
+			},
+		]);
+
+		R3FTouchAdapter({});
+
+		// Pointer down - hits child but handler is on parent
+		capturedTouchHandler!({ x: 100, y: 100, type: "down", timestamp: Date.now() });
+		expect(handlerCalls).toHaveLength(1);
+		expect(handlerCalls[0].name).toBe("onPointerDown");
+
+		// Call setPointerCapture (this is the bug fix - should store parent, not child)
+		const target = handlerCalls[0].event.target as unknown as {
+			setPointerCapture: (id: number) => void;
+		};
+		target.setPointerCapture(1);
+
+		// Raycaster now misses entirely (pointer moved off screen)
+		mockRaycaster.intersectObjects.mockReturnValue([]);
+
+		// Pointer up - should still reach parent's handler via capture
+		// Before the fix, this would fail because capture stored child (no handlers)
+		capturedTouchHandler!({ x: 500, y: 500, type: "up", timestamp: Date.now() });
+		expect(handlerCalls).toHaveLength(2);
+		expect(handlerCalls[1].name).toBe("onPointerUp");
+	});
 });

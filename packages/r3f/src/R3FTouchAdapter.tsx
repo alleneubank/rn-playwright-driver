@@ -40,18 +40,31 @@ export type R3FTouchAdapterProps = {
  * Maps pointerId -> captured object info.
  */
 type CaptureInfo = {
-	object: Object3D;
+	/** The object where the handler was found (may be ancestor of hit object) */
+	handlerObject: Object3D;
 	intersection: Intersection;
+};
+
+/**
+ * Result of finding a handler on an object or its ancestors.
+ */
+type HandlerResult = {
+	handler: (event: ThreeEvent<PointerEvent>) => void;
+	/** The object where the handler was found */
+	handlerObject: Object3D;
 };
 
 /**
  * Create a synthetic R3F-style pointer event with all required properties.
  * This event can be passed directly to React handlers (onPointerDown, etc.).
+ *
+ * @param handlerObject - The object where the handler was found (for capture tracking)
  */
 function createR3FPointerEvent(
 	touchEvent: TouchEvent,
 	pointerId: number,
 	intersection: Intersection,
+	handlerObject: Object3D,
 	captureMap: Map<number, CaptureInfo>,
 ): ThreeEvent<PointerEvent> {
 	let stopped = false;
@@ -79,9 +92,10 @@ function createR3FPointerEvent(
 		buttons: touchEvent.type === "up" ? 0 : 1,
 
 		// Capture methods that update our tracking map
+		// Store handlerObject (where handler was found), not intersection.object (raycast hit)
 		target: {
 			setPointerCapture: (id: number) => {
-				captureMap.set(id, { object: intersection.object, intersection });
+				captureMap.set(id, { handlerObject, intersection });
 			},
 			releasePointerCapture: (id: number) => {
 				captureMap.delete(id);
@@ -90,7 +104,7 @@ function createR3FPointerEvent(
 		},
 		currentTarget: {
 			setPointerCapture: (id: number) => {
-				captureMap.set(id, { object: intersection.object, intersection });
+				captureMap.set(id, { handlerObject, intersection });
 			},
 			releasePointerCapture: (id: number) => {
 				captureMap.delete(id);
@@ -146,17 +160,18 @@ export function R3FTouchAdapter({ id }: R3FTouchAdapterProps): null {
 
 		/**
 		 * Find the R3F handler on an object or its ancestors.
+		 * Returns both the handler and the object where it was found.
 		 */
-		const findHandler = (
-			object: Object3D,
-			handlerName: string,
-		): ((event: ThreeEvent<PointerEvent>) => void) | null => {
+		const findHandler = (object: Object3D, handlerName: string): HandlerResult | null => {
 			let current: Object3D | null = object;
 			while (current) {
 				const r3f = (current as Object3D & { __r3f?: { handlers?: Record<string, unknown> } })
 					.__r3f;
 				if (r3f?.handlers?.[handlerName]) {
-					return r3f.handlers[handlerName] as (event: ThreeEvent<PointerEvent>) => void;
+					return {
+						handler: r3f.handlers[handlerName] as (event: ThreeEvent<PointerEvent>) => void,
+						handlerObject: current,
+					};
 				}
 				current = current.parent;
 			}
@@ -172,18 +187,19 @@ export function R3FTouchAdapter({ id }: R3FTouchAdapterProps): null {
 
 			if (touchEvent.type === "up" || touchEvent.type === "move") {
 				if (captured) {
-					// Route to captured object
+					// Route to captured object (start from handlerObject, not hit object)
 					const handlerName = touchEvent.type === "up" ? "onPointerUp" : "onPointerMove";
-					const objectHandler = findHandler(captured.object, handlerName);
+					const result = findHandler(captured.handlerObject, handlerName);
 
-					if (objectHandler) {
+					if (result) {
 						const event = createR3FPointerEvent(
 							touchEvent,
 							pointerId,
 							captured.intersection,
+							result.handlerObject,
 							captureMap,
 						);
-						objectHandler(event);
+						result.handler(event);
 					}
 
 					// Clean up capture on pointer up
@@ -208,10 +224,16 @@ export function R3FTouchAdapter({ id }: R3FTouchAdapterProps): null {
 
 			// Find first object with the appropriate handler
 			for (const hit of hits) {
-				const objectHandler = findHandler(hit.object, handlerName);
-				if (objectHandler) {
-					const event = createR3FPointerEvent(touchEvent, pointerId, hit, captureMap);
-					objectHandler(event);
+				const result = findHandler(hit.object, handlerName);
+				if (result) {
+					const event = createR3FPointerEvent(
+						touchEvent,
+						pointerId,
+						hit,
+						result.handlerObject,
+						captureMap,
+					);
+					result.handler(event);
 
 					// Stop after first handler (event didn't propagate)
 					if (event.stopped) break;
