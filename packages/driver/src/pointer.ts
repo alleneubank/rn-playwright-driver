@@ -1,9 +1,14 @@
+import type { GestureExecutor } from "./gesture-builder";
+import { GestureBuilderImpl } from "./gesture-builder";
+import { DEFAULT_FRAME_MS, resolveInterpolation } from "./gesture-utils";
+import { MultiGestureBuilderImpl } from "./multi-gesture-builder";
 import type { TouchBackend } from "./touch";
 import { TouchBackendNotInitializedError } from "./touch";
 import type {
   DragOptions,
   DragPathOptions,
   GestureBuilder,
+  InterpolationOptions,
   LongPressOptions,
   MoveOptions,
   MovePathOptions,
@@ -15,10 +20,6 @@ import type {
   SwipeOptions,
   TapOptions,
 } from "./types";
-import type { GestureExecutor } from "./gesture-builder";
-import { GestureBuilderImpl } from "./gesture-builder";
-import { MultiGestureBuilderImpl } from "./multi-gesture-builder";
-import { DEFAULT_FRAME_MS, resolveInterpolation } from "./gesture-utils";
 
 const DEFAULT_DRAG_STEPS = 10;
 const DEFAULT_SWIPE_DURATION = 300;
@@ -271,10 +272,10 @@ export class Pointer {
     const leftEnd = { x: options.center.x - endOffset, y: options.center.y };
     const rightEnd = { x: options.center.x + endOffset, y: options.center.y };
 
-    const interpolation = {
-      duration: options.duration,
+    const interpolation: InterpolationOptions = {
       steps: options.steps ?? DEFAULT_PINCH_STEPS,
-      easing: options.easing,
+      ...(options.duration !== undefined && { duration: options.duration }),
+      ...(options.easing !== undefined && { easing: options.easing }),
     };
 
     multi
@@ -305,14 +306,18 @@ export class Pointer {
     const multi = this.multiGesture();
 
     const startLeft = pointOnCircle(options.center, options.distance, options.startAngle);
-    const startRight = pointOnCircle(options.center, options.distance, options.startAngle + Math.PI);
+    const startRight = pointOnCircle(
+      options.center,
+      options.distance,
+      options.startAngle + Math.PI,
+    );
     const endLeft = pointOnCircle(options.center, options.distance, options.endAngle);
     const endRight = pointOnCircle(options.center, options.distance, options.endAngle + Math.PI);
 
-    const interpolation = {
-      duration: options.duration,
+    const interpolation: InterpolationOptions = {
       steps: options.steps ?? DEFAULT_ROTATE_STEPS,
-      easing: options.easing,
+      ...(options.duration !== undefined && { duration: options.duration }),
+      ...(options.easing !== undefined && { easing: options.easing }),
     };
 
     multi
@@ -402,7 +407,9 @@ export class Pointer {
   }
 }
 
-function pickPointerEventOptions(options?: PointerEventOptions | MoveOptions): PointerEventOptions | undefined {
+function pickPointerEventOptions(
+  options?: PointerEventOptions | MoveOptions,
+): PointerEventOptions | undefined {
   if (!options) {
     return undefined;
   }
@@ -410,7 +417,10 @@ function pickPointerEventOptions(options?: PointerEventOptions | MoveOptions): P
   if (pointerId === undefined && pressure === undefined) {
     return undefined;
   }
-  return { pointerId, pressure };
+  const result: PointerEventOptions = {};
+  if (pointerId !== undefined) result.pointerId = pointerId;
+  if (pressure !== undefined) result.pressure = pressure;
+  return result;
 }
 
 function pointOnCircle(center: Point, radius: number, angle: number): Point {

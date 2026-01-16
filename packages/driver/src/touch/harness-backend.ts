@@ -66,7 +66,9 @@ export class HarnessTouchBackend implements TouchBackend {
     await this.ensureHarness();
     const optionsExpression = serializePointerOptions(options);
     if (optionsExpression) {
-      await this.context.evaluate<void>(`globalThis.__RN_DRIVER__.pointer.up(${optionsExpression})`);
+      await this.context.evaluate<void>(
+        `globalThis.__RN_DRIVER__.pointer.up(${optionsExpression})`,
+      );
       return;
     }
     await this.context.evaluate<void>(`globalThis.__RN_DRIVER__.pointer.up()`);

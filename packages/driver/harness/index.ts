@@ -365,9 +365,15 @@ function installHarness(): void {
   }
 
   const handlers = new Map<string, TouchHandler>();
-  const pointerStates = new Map<number, { lastPosition: { x: number; y: number } | null; isDown: boolean }>();
+  const pointerStates = new Map<
+    number,
+    { lastPosition: { x: number; y: number } | null; isDown: boolean }
+  >();
 
-  function getPointerState(pointerId: number): { lastPosition: { x: number; y: number } | null; isDown: boolean } {
+  function getPointerState(pointerId: number): {
+    lastPosition: { x: number; y: number } | null;
+    isDown: boolean;
+  } {
     const existing = pointerStates.get(pointerId);
     if (existing) {
       return existing;

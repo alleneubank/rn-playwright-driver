@@ -1,5 +1,5 @@
-import type { Easing, InterpolationOptions } from "./types";
 import { resolveEasing } from "./easing";
+import type { Easing, InterpolationOptions } from "./types";
 
 export const DEFAULT_FRAME_MS = 16;
 

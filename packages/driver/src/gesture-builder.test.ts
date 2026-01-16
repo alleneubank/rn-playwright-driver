@@ -56,13 +56,7 @@ describe("Gesture Builder", () => {
   });
 
   it("should expose planned events via toEvents()", () => {
-    const events = pointer
-      .gesture()
-      .down(1, 2)
-      .wait(5)
-      .moveTo(3, 4)
-      .up()
-      .toEvents();
+    const events = pointer.gesture().down(1, 2).wait(5).moveTo(3, 4).up().toEvents();
 
     expect(events).toEqual([
       { type: "down", x: 1, y: 2, pointerId: undefined, pressure: undefined },

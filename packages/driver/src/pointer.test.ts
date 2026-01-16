@@ -72,11 +72,7 @@ describe("Pointer Path Methods", () => {
     });
 
     it("should skip hold delays when set to 0", async () => {
-      await pointer.drag(
-        { x: 0, y: 0 },
-        { x: 10, y: 10 },
-        { holdStart: 0, holdEnd: 0, steps: 1 },
-      );
+      await pointer.drag({ x: 0, y: 0 }, { x: 10, y: 10 }, { holdStart: 0, holdEnd: 0, steps: 1 });
 
       expect(mockTimeoutProvider.waitForTimeout).not.toHaveBeenCalled();
     });

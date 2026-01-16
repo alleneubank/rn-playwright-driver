@@ -1,3 +1,4 @@
+import { DEFAULT_FRAME_MS, resolveInterpolation } from "./gesture-utils";
 import type {
   GestureBuilder,
   InterpolationOptions,
@@ -5,7 +6,6 @@ import type {
   Point,
   PointerEventOptions,
 } from "./types";
-import { DEFAULT_FRAME_MS, resolveInterpolation } from "./gesture-utils";
 
 export type GestureExecutor = {
   down: (x: number, y: number, options?: PointerEventOptions) => Promise<void>;
@@ -46,14 +46,10 @@ export class GestureBuilderImpl implements GestureBuilder {
     }
 
     const from = this.currentPosition;
-    this.pushInterpolatedMoves(
-      options,
-      { steps: 1, easing: "linear" },
-      (t) => ({
-        x: from.x + (x - from.x) * t,
-        y: from.y + (y - from.y) * t,
-      }),
-    );
+    this.pushInterpolatedMoves(options, { steps: 1, easing: "linear" }, (t) => ({
+      x: from.x + (x - from.x) * t,
+      y: from.y + (y - from.y) * t,
+    }));
     this.currentPosition = { x, y };
     return this;
   }
@@ -89,17 +85,13 @@ export class GestureBuilderImpl implements GestureBuilder {
     endAngle: number,
     options?: InterpolationOptions,
   ): this {
-    this.pushInterpolatedMoves(
-      options,
-      { steps: 1, easing: "linear" },
-      (t) => {
-        const angle = startAngle + (endAngle - startAngle) * t;
-        return {
-          x: center.x + radius * Math.cos(angle),
-          y: center.y + radius * Math.sin(angle),
-        };
-      },
-    );
+    this.pushInterpolatedMoves(options, { steps: 1, easing: "linear" }, (t) => {
+      const angle = startAngle + (endAngle - startAngle) * t;
+      return {
+        x: center.x + radius * Math.cos(angle),
+        y: center.y + radius * Math.sin(angle),
+      };
+    });
     const endPoint = {
       x: center.x + radius * Math.cos(endAngle),
       y: center.y + radius * Math.sin(endAngle),
@@ -108,34 +100,25 @@ export class GestureBuilderImpl implements GestureBuilder {
     return this;
   }
 
-  bezier(
-    control1: Point,
-    control2: Point,
-    end: Point,
-    options?: InterpolationOptions,
-  ): this {
+  bezier(control1: Point, control2: Point, end: Point, options?: InterpolationOptions): this {
     if (!this.currentPosition) {
       throw new Error("bezier() requires a starting position. Call down() or moveTo() first.");
     }
     const start = this.currentPosition;
-    this.pushInterpolatedMoves(
-      options,
-      { steps: 1, easing: "linear" },
-      (t) => {
-        const oneMinusT = 1 - t;
-        const x =
-          oneMinusT * oneMinusT * oneMinusT * start.x +
-          3 * oneMinusT * oneMinusT * t * control1.x +
-          3 * oneMinusT * t * t * control2.x +
-          t * t * t * end.x;
-        const y =
-          oneMinusT * oneMinusT * oneMinusT * start.y +
-          3 * oneMinusT * oneMinusT * t * control1.y +
-          3 * oneMinusT * t * t * control2.y +
-          t * t * t * end.y;
-        return { x, y };
-      },
-    );
+    this.pushInterpolatedMoves(options, { steps: 1, easing: "linear" }, (t) => {
+      const oneMinusT = 1 - t;
+      const x =
+        oneMinusT * oneMinusT * oneMinusT * start.x +
+        3 * oneMinusT * oneMinusT * t * control1.x +
+        3 * oneMinusT * t * t * control2.x +
+        t * t * t * end.x;
+      const y =
+        oneMinusT * oneMinusT * oneMinusT * start.y +
+        3 * oneMinusT * oneMinusT * t * control1.y +
+        3 * oneMinusT * t * t * control2.y +
+        t * t * t * end.y;
+      return { x, y };
+    });
     this.currentPosition = end;
     return this;
   }
@@ -156,7 +139,11 @@ export class GestureBuilderImpl implements GestureBuilder {
         if (event.x === undefined || event.y === undefined) {
           throw new Error("Planned down event is missing coordinates.");
         }
-        await this.executor.down(event.x, event.y, buildPointerOptions(event.pointerId, event.pressure));
+        await this.executor.down(
+          event.x,
+          event.y,
+          buildPointerOptions(event.pointerId, event.pressure),
+        );
         return;
       case "move":
         if (event.x === undefined || event.y === undefined) {
@@ -182,7 +169,11 @@ export class GestureBuilderImpl implements GestureBuilder {
 
   private pushInterpolatedMoves(
     options: InterpolationOptions | undefined,
-    defaults: { steps: number; easing: "linear" | "ease-in" | "ease-out" | "ease-in-out"; duration?: number },
+    defaults: {
+      steps: number;
+      easing: "linear" | "ease-in" | "ease-out" | "ease-in-out";
+      duration?: number;
+    },
     pointAt: (t: number) => Point,
   ): void {
     const { steps, easing, stepDelayMs } = resolveInterpolation(options, defaults);

@@ -59,12 +59,7 @@ export type Point = {
   y: number;
 };
 
-export type Easing =
-  | "linear"
-  | "ease-in"
-  | "ease-out"
-  | "ease-in-out"
-  | ((t: number) => number);
+export type Easing = "linear" | "ease-in" | "ease-out" | "ease-in-out" | ((t: number) => number);
 
 export type PointerEventOptions = {
   /** Pointer ID for multi-touch (default: 0) */
@@ -113,11 +108,11 @@ export type LongPressOptions = TimingOptions & {
 /** Options for swipe gesture */
 export type SwipeOptions = TimingOptions &
   InterpolationOptions & {
-  /** Starting point */
-  from: Point;
-  /** Ending point */
-  to: Point;
-};
+    /** Starting point */
+    from: Point;
+    /** Ending point */
+    to: Point;
+  };
 
 export type TouchBackendType = "xctest" | "instrumentation" | "native-module" | "cli" | "harness";
 
@@ -242,12 +237,7 @@ export interface GestureBuilder {
     options?: InterpolationOptions,
   ): this;
 
-  bezier(
-    control1: Point,
-    control2: Point,
-    end: Point,
-    options?: InterpolationOptions,
-  ): this;
+  bezier(control1: Point, control2: Point, end: Point, options?: InterpolationOptions): this;
 
   // Execution
   execute(): Promise<void>;
@@ -433,7 +423,11 @@ export interface Device {
     /** Release press */
     up(options?: PointerEventOptions): Promise<void>;
     /** Drag from one point to another with interpolation */
-    drag(from: { x: number; y: number }, to: { x: number; y: number }, options?: DragOptions): Promise<void>;
+    drag(
+      from: { x: number; y: number },
+      to: { x: number; y: number },
+      options?: DragOptions,
+    ): Promise<void>;
     /** Swipe from one point to another with duration-based animation */
     swipe(options: SwipeOptions): Promise<void>;
     /**

@@ -1,6 +1,6 @@
-import type { GestureBuilder, MultiGestureBuilder, PlannedPointerEvent } from "./types";
 import type { GestureExecutor } from "./gesture-builder";
 import { GestureBuilderImpl } from "./gesture-builder";
+import type { GestureBuilder, MultiGestureBuilder, PlannedPointerEvent } from "./types";
 
 type ScheduledEvent = {
   time: number;
@@ -68,7 +68,11 @@ export class MultiGestureBuilderImpl implements MultiGestureBuilder {
         if (event.x === undefined || event.y === undefined) {
           throw new Error("Planned down event is missing coordinates.");
         }
-        await this.executor.down(event.x, event.y, buildPointerOptions(event.pointerId, event.pressure));
+        await this.executor.down(
+          event.x,
+          event.y,
+          buildPointerOptions(event.pointerId, event.pressure),
+        );
         return;
       case "move":
         if (event.x === undefined || event.y === undefined) {
