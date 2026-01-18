@@ -326,6 +326,21 @@ export function TestBridge({ id, rapier = false }: TestBridgeProps): null {
 				};
 				const eventName = eventNameMap[type];
 
+				// Track captured pointers for hasPointerCapture
+				const capturedPointers = new Set<number>();
+
+				// Minimal target/currentTarget with pointer capture API
+				// R3F handlers may call event.target.setPointerCapture for drag gestures
+				const syntheticTarget = {
+					setPointerCapture: (pointerId: number) => {
+						capturedPointers.add(pointerId);
+					},
+					releasePointerCapture: (pointerId: number) => {
+						capturedPointers.delete(pointerId);
+					},
+					hasPointerCapture: (pointerId: number) => capturedPointers.has(pointerId),
+				};
+
 				// Create synthetic event matching R3F's expected format
 				// R3F's handleTouch transforms: offsetX = locationX, offsetY = locationY
 				// Cast as unknown since R3F only uses a subset of PointerEvent properties
@@ -340,16 +355,15 @@ export function TestBridge({ id, rapier = false }: TestBridgeProps): null {
 					clientY: y,
 					pageX: x,
 					pageY: y,
+					target: syntheticTarget,
+					currentTarget: syntheticTarget,
 					preventDefault: () => {},
 					stopPropagation: () => {},
 				} as unknown as PointerEvent;
 
-				try {
-					handlePointer(eventName)(syntheticEvent);
-					return true;
-				} catch {
-					return false;
-				}
+				// Let exceptions propagate so tests fail loudly on handler errors
+				handlePointer(eventName)(syntheticEvent);
+				return true;
 			},
 		};
 
