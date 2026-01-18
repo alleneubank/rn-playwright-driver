@@ -16,7 +16,6 @@ test.describe("Device Capabilities", () => {
     expect(caps).toHaveProperty("screenshot");
     expect(caps).toHaveProperty("lifecycle");
     expect(caps).toHaveProperty("touchNative");
-    expect(caps).toHaveProperty("pointer");
   });
 
   test("capabilities() returns boolean values", async ({ device }) => {
@@ -26,20 +25,6 @@ test.describe("Device Capabilities", () => {
     expect(typeof caps.screenshot).toBe("boolean");
     expect(typeof caps.lifecycle).toBe("boolean");
     expect(typeof caps.touchNative).toBe("boolean");
-    expect(typeof caps.pointer).toBe("boolean");
-  });
-
-  test("pointer capability is true when harness is installed", async ({ device }) => {
-    const caps = await device.capabilities();
-
-    // If harness is installed, pointer should be available
-    const hasHarness = await device.evaluate<boolean>(
-      "typeof globalThis.__RN_DRIVER__ !== 'undefined'",
-    );
-
-    if (hasHarness) {
-      expect(caps.pointer).toBe(true);
-    }
   });
 
   test("capabilities match harness-reported capabilities", async ({ device }) => {
@@ -51,12 +36,11 @@ test.describe("Device Capabilities", () => {
       screenshot: boolean;
       lifecycle: boolean;
       touchNative: boolean;
-      pointer: boolean;
     }>("globalThis.__RN_DRIVER__.capabilities");
 
     expect(deviceCaps.viewTree).toBe(harnessCaps.viewTree);
     expect(deviceCaps.screenshot).toBe(harnessCaps.screenshot);
     expect(deviceCaps.lifecycle).toBe(harnessCaps.lifecycle);
-    expect(deviceCaps.pointer).toBe(harnessCaps.pointer);
+    expect(deviceCaps.touchNative).toBe(harnessCaps.touchNative);
   });
 });

@@ -8,7 +8,7 @@ export class CliTouchBackend implements TouchBackend {
   async init(): Promise<void> {
     throw new TouchBackendUnavailableError(
       this.name,
-      "CLI touch backend not implemented yet. Configure XCTest/Instrumentation or use the JS harness.",
+      "CLI touch backend not implemented yet. Install @0xbigboss/rn-driver-touch or configure XCTest/Instrumentation.",
     );
   }
 

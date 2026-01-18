@@ -341,7 +341,7 @@ export class Pointer {
 
   private getBackend(): TouchBackend {
     if (!this.backend) {
-      throw new TouchBackendNotInitializedError("harness");
+      throw new TouchBackendNotInitializedError("native-module");
     }
     return this.backend;
   }

@@ -64,13 +64,13 @@ export class NativeModuleTouchBackend implements TouchBackend {
 
   private async ensureModule(): Promise<void> {
     const hasModule = await this.context.evaluate<boolean>(
-      "typeof globalThis.__RN_DRIVER__ !== 'undefined' && typeof globalThis.__RN_DRIVER__.touchNative !== 'undefined'",
+      "typeof globalThis.__RN_DRIVER__ !== 'undefined' && globalThis.__RN_DRIVER__?.capabilities?.touchNative === true",
     );
 
     if (!hasModule) {
       throw new TouchBackendUnavailableError(
         this.name,
-        "RNDriverTouchInjector native module not found in app.",
+        "RNDriverTouchInjector native module not found in app. Install @0xbigboss/rn-driver-touch and rebuild.",
       );
     }
   }

@@ -225,7 +225,7 @@ export class RNDevice implements Device {
 
   async capabilities(): Promise<Capabilities> {
     return this.evaluate<Capabilities>(
-      "globalThis.__RN_DRIVER__?.capabilities ?? { viewTree: false, screenshot: false, lifecycle: false, touchNative: false, pointer: true }",
+      "globalThis.__RN_DRIVER__?.capabilities ?? { viewTree: false, screenshot: false, lifecycle: false, touchNative: false }",
     );
   }
 

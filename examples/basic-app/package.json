@@ -14,12 +14,13 @@
     "knip": "knip",
     "cpd": "jscpd .",
     "check": "bun run typecheck && bun run knip && bun run cpd && bun run lint",
-    "test:e2e": "RN_TOUCH_BACKEND=harness playwright test",
+    "test:e2e": "playwright test",
     "prepare": "lefthook install"
   },
   "dependencies": {
     "@0xbigboss/rn-driver-lifecycle": "workspace:*",
     "@0xbigboss/rn-driver-screenshot": "workspace:*",
+    "@0xbigboss/rn-driver-touch": "workspace:*",
     "@0xbigboss/rn-driver-view-tree": "workspace:*",
     "@0xbigboss/rn-playwright-driver": "workspace:*",
     "expo": "~54.0.30",

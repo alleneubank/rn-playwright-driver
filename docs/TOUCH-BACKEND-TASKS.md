@@ -63,7 +63,7 @@ In-app touch synthesis for network-capable testing. Lower priority than companio
 ### Task: Create RNDriverTouchInjector package
 
 ```
-packages/touch-injector/
+packages/rn-driver-touch/
 ├── ios/
 │   ├── RNDriverTouchInjector.podspec
 │   └── RNDriverTouchInjectorModule.swift
@@ -215,7 +215,7 @@ Fallback for when companions aren't running but CLI tools are available.
   - Add Gradle build setup
   - Document APK building and installation
 
-- [ ] **touch-injector** (when implemented)
+- [ ] **rn-driver-touch** (when implemented)
   - Standard Expo module publishing
   - Add to example app dependencies
 

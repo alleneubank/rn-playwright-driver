@@ -34,17 +34,6 @@ test.describe("Touch Backend Info", () => {
     expect(info.available).toContain(info.selected);
   });
 
-  test("harness backend is available when harness is installed", async ({ device }) => {
-    const hasHarness = await device.evaluate<boolean>(
-      "typeof globalThis.__RN_DRIVER__ !== 'undefined'",
-    );
-
-    if (hasHarness) {
-      const info = await device.getTouchBackendInfo();
-      expect(info.available).toContain("harness");
-    }
-  });
-
   test("reason field is present if provided", async ({ device }) => {
     const info = await device.getTouchBackendInfo();
 
@@ -69,6 +58,15 @@ test.describe("Touch Backend Info", () => {
 
     for (const backend of info.available) {
       expect(validBackends).toContain(backend);
+    }
+  });
+
+  test("native-module is selected when touchNative capability is true", async ({ device }) => {
+    const caps = await device.capabilities();
+
+    if (caps.touchNative) {
+      const info = await device.getTouchBackendInfo();
+      expect(info.selected).toBe("native-module");
     }
   });
 });

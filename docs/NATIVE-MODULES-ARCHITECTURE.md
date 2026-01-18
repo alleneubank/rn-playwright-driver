@@ -31,7 +31,7 @@ This document describes the complete architecture for Phase 3 native modules in 
 | `@0xbigboss/rn-driver-lifecycle` | App state control | 🔶 Partial |
 | `@0xbigboss/rn-playwright-driver-xctest-companion` | iOS OS-level touch injection | ✅ Reference impl (manual integration) |
 | `@0xbigboss/rn-playwright-driver-instrumentation-companion` | Android OS-level touch injection | ✅ Reference impl (manual integration) |
-| `@0xbigboss/rn-driver-touch-injector` | In-app touch synthesis | ❌ Not started |
+| `@0xbigboss/rn-driver-touch` | In-app touch synthesis | ❌ Not started |
 
 ## System Architecture
 
@@ -465,11 +465,6 @@ import LifecycleModule from 'expo-rn-driver-lifecycle';
 export type RNDriverGlobal = {
   version: string;
 
-  // Phase 2 - JS-only pointer simulation
-  pointer: { ... };
-  registerTouchHandler: (...) => void;
-  unregisterTouchHandler: (...) => void;
-
   // Phase 3 - Native module bridges
   viewTree: {
     findByTestId: (testId: string) => Promise<NativeResult<ElementInfo>>;
@@ -497,11 +492,20 @@ export type RNDriverGlobal = {
     getState: () => Promise<NativeResult<'active' | 'background' | 'inactive'>>;
   };
 
+  // Phase 3.5 - Native touch injection
+  touchNative: {
+    tap: (x: number, y: number) => Promise<NativeResult<void>>;
+    down: (x: number, y: number) => Promise<NativeResult<void>>;
+    move: (x: number, y: number) => Promise<NativeResult<void>>;
+    up: () => Promise<NativeResult<void>>;
+  };
+
   // Feature detection
   capabilities: {
     viewTree: boolean;
     screenshot: boolean;
     lifecycle: boolean;
+    touchNative: boolean;
   };
 };
 ```
@@ -515,6 +519,7 @@ function detectCapabilities(): Capabilities {
     viewTree: typeof ViewTreeModule?.findByTestId === 'function',
     screenshot: typeof ScreenshotModule?.captureScreen === 'function',
     lifecycle: typeof LifecycleModule?.openURL === 'function',
+    touchNative: typeof TouchNativeModule?.tap === 'function',
   };
 }
 
@@ -771,7 +776,7 @@ All packages live in a single repository:
 Touch simulation continues to use the Phase 2 JS harness approach:
 - Already works reliably
 - Simpler than native touch synthesis (UITouch, MotionEvent)
-- Supports framework adapters (R3F, etc.) via `registerTouchHandler`
+- Native touch injection (no JS touch handler routing)
 - Native touch injection can be added later if needed
 
 ### 3. Random IDs for Element Handles
@@ -973,7 +978,7 @@ In `"force"` mode, only the specified backend is tried and errors are thrown imm
 
 **Purpose**: In-app touch synthesis using platform APIs.
 
-**Package**: `@0xbigboss/rn-driver-touch-injector`
+**Package**: `@0xbigboss/rn-driver-touch`
 
 #### API
 
@@ -1271,7 +1276,7 @@ packages/
 │           ├── cli-backend.ts          # idb/adb CLI wrapper
 │           └── index.ts                # Factory + exports
 │
-├── touch-injector/                     # @0xbigboss/rn-driver-touch-injector
+├── rn-driver-touch/                     # @0xbigboss/rn-driver-touch
 │   ├── ios/
 │   │   └── RNDriverTouchInjectorModule.swift
 │   ├── android/

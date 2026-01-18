@@ -16,7 +16,7 @@ export type GestureExecutor = {
 
 export class GestureBuilderImpl implements GestureBuilder {
   private readonly executor: GestureExecutor;
-  private readonly pointerId?: number;
+  private readonly pointerId: number | undefined;
   private readonly events: PlannedPointerEvent[] = [];
   private currentPosition: Point | null = null;
 
@@ -27,21 +27,31 @@ export class GestureBuilderImpl implements GestureBuilder {
 
   down(x: number, y: number, options?: PointerEventOptions): this {
     const pointerId = this.resolvePointerId(options);
-    this.events.push({ type: "down", x, y, pointerId, pressure: options?.pressure });
+    this.events.push({
+      type: "down",
+      x,
+      y,
+      ...buildPlannedPointerFields(pointerId, options?.pressure),
+    });
     this.currentPosition = { x, y };
     return this;
   }
 
   up(options?: PointerEventOptions): this {
     const pointerId = this.resolvePointerId(options);
-    this.events.push({ type: "up", pointerId, pressure: options?.pressure });
+    this.events.push({ type: "up", ...buildPlannedPointerFields(pointerId, options?.pressure) });
     return this;
   }
 
   moveTo(x: number, y: number, options?: InterpolationOptions): this {
     if (!this.currentPosition) {
       this.currentPosition = { x, y };
-      this.events.push({ type: "move", x, y, pointerId: this.pointerId });
+      this.events.push({
+        type: "move",
+        x,
+        y,
+        ...buildPlannedPointerFields(this.pointerId, undefined),
+      });
       return this;
     }
 
@@ -182,7 +192,12 @@ export class GestureBuilderImpl implements GestureBuilder {
         this.events.push({ type: "wait", ms: stepDelayMs });
       }
       const point = pointAt(easing(i / steps));
-      this.events.push({ type: "move", x: point.x, y: point.y, pointerId: this.pointerId });
+      this.events.push({
+        type: "move",
+        x: point.x,
+        y: point.y,
+        ...buildPlannedPointerFields(this.pointerId, undefined),
+      });
     }
   }
 
@@ -214,4 +229,18 @@ function buildPointerOptions(
     options.pressure = pressure;
   }
   return options;
+}
+
+function buildPlannedPointerFields(
+  pointerId?: number,
+  pressure?: number,
+): { pointerId?: number; pressure?: number } {
+  const fields: { pointerId?: number; pressure?: number } = {};
+  if (pointerId !== undefined) {
+    fields.pointerId = pointerId;
+  }
+  if (pressure !== undefined) {
+    fields.pressure = pressure;
+  }
+  return fields;
 }

@@ -4,35 +4,9 @@
  * Usage:
  *   import '@0xbigboss/rn-playwright-driver/harness';
  *
- * This creates global.__RN_DRIVER__ with pointer simulation,
- * framework adapter registration, and native module bridges.
+ * This creates global.__RN_DRIVER__ with native module bridges,
+ * tracing, and utility helpers.
  */
-
-/**
- * Touch event data passed to handlers.
- */
-export type TouchEvent = {
-  /** X position in logical points */
-  x: number;
-  /** Y position in logical points */
-  y: number;
-  /** Event type */
-  type: "down" | "move" | "up";
-  /** Timestamp when event was created */
-  timestamp: number;
-  /** Pointer ID for multi-touch (default: 0) */
-  pointerId?: number;
-  /** Pressure 0-1 for pressure-sensitive input (default: 1) */
-  pressure?: number;
-};
-
-/**
- * Pointer event options.
- */
-export type PointerEventOptions = {
-  pointerId?: number;
-  pressure?: number;
-};
 
 /**
  * Window metrics for layout assertions and coordinate calculations.
@@ -87,10 +61,6 @@ export type TracingOptions = {
   includeConsole?: boolean;
 };
 
-/**
- * Touch handler function type.
- */
-export type TouchHandler = (event: TouchEvent) => void;
 
 /**
  * Bounding rectangle in logical points.
@@ -150,7 +120,6 @@ export type Capabilities = {
   screenshot: boolean;
   lifecycle: boolean;
   touchNative: boolean;
-  pointer: boolean;
 };
 
 /**
@@ -216,25 +185,6 @@ export type RNDriverGlobal = {
   /** Version of the harness */
   version: string;
 
-  /** Pointer/touch simulation */
-  pointer: {
-    tap: (x: number, y: number, options?: PointerEventOptions) => void;
-    down: (x: number, y: number, options?: PointerEventOptions) => void;
-    move: (x: number, y: number, options?: PointerEventOptions) => void;
-    up: (options?: PointerEventOptions) => void;
-  };
-
-  /**
-   * Register a touch handler for a framework adapter.
-   * Key is used to allow HMR updates (re-registration with same key replaces).
-   */
-  registerTouchHandler: (key: string, handler: TouchHandler) => void;
-
-  /**
-   * Unregister a touch handler.
-   */
-  unregisterTouchHandler: (key: string) => void;
-
   /** View tree native module bridge (Phase 3) */
   viewTree: ViewTreeBridge;
 
@@ -289,9 +239,6 @@ export type RNDriverGlobal = {
 
   /** Internal state (for debugging) */
   _internal: {
-    handlers: Map<string, TouchHandler>;
-    lastPosition: { x: number; y: number } | null;
-    isDown: boolean;
     frameCount: number;
     tracing: {
       active: boolean;
@@ -339,7 +286,7 @@ const MODULE_INSTALL_INSTRUCTIONS: Record<string, string> = {
   RNDriverLifecycle:
     "RNDriverLifecycle module not installed. Install @0xbigboss/rn-driver-lifecycle and rebuild your app.",
   RNDriverTouchInjector:
-    "RNDriverTouchInjector module not installed. Install @0xbigboss/rn-driver-touch-injector and rebuild your app.",
+    "RNDriverTouchInjector module not installed. Install @0xbigboss/rn-driver-touch and rebuild your app.",
 };
 
 /**
@@ -362,25 +309,6 @@ function installHarness(): void {
   // Don't reinstall if already present (allows HMR)
   if (global.__RN_DRIVER__) {
     return;
-  }
-
-  const handlers = new Map<string, TouchHandler>();
-  const pointerStates = new Map<
-    number,
-    { lastPosition: { x: number; y: number } | null; isDown: boolean }
-  >();
-
-  function getPointerState(pointerId: number): {
-    lastPosition: { x: number; y: number } | null;
-    isDown: boolean;
-  } {
-    const existing = pointerStates.get(pointerId);
-    if (existing) {
-      return existing;
-    }
-    const state = { lastPosition: null, isDown: false };
-    pointerStates.set(pointerId, state);
-    return state;
   }
 
   // RAF frame counter - monotonically increasing
@@ -424,37 +352,6 @@ function installHarness(): void {
     // Ring buffer: remove oldest events if over limit
     while (tracingState.events.length > tracingState.maxEvents) {
       tracingState.events.shift();
-    }
-  }
-
-  function buildPointerTraceData(
-    x: number,
-    y: number,
-    pointerId: number,
-    pressure?: number,
-  ): Record<string, unknown> {
-    const data: Record<string, unknown> = { x, y };
-    if (pointerId !== 0) {
-      data.pointerId = pointerId;
-    }
-    if (pressure !== undefined) {
-      data.pressure = pressure;
-    }
-    return data;
-  }
-
-  /**
-   * Dispatch a touch event to all registered handlers.
-   */
-  function dispatchTouch(event: TouchEvent): void {
-    for (const handler of handlers.values()) {
-      try {
-        handler(event);
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        traceEvent("error", { source: "touchHandler", message: errorMessage });
-        console.error("[RN_DRIVER] Handler error:", error);
-      }
     }
   }
 
@@ -655,10 +552,22 @@ function installHarness(): void {
 
   const touchNative: TouchNativeBridge = touchNativeModule
     ? {
-        tap: (x, y) => touchNativeModule.tap(x, y),
-        down: (x, y) => touchNativeModule.down(x, y),
-        move: (x, y) => touchNativeModule.move(x, y),
-        up: () => touchNativeModule.up(),
+        tap: (x, y) => {
+          traceEvent("pointer:tap", { x, y });
+          return touchNativeModule.tap(x, y);
+        },
+        down: (x, y) => {
+          traceEvent("pointer:down", { x, y });
+          return touchNativeModule.down(x, y);
+        },
+        move: (x, y) => {
+          traceEvent("pointer:move", { x, y });
+          return touchNativeModule.move(x, y);
+        },
+        up: () => {
+          traceEvent("pointer:up");
+          return touchNativeModule.up();
+        },
         swipe: (fromX, fromY, toX, toY, durationMs) =>
           touchNativeModule.swipe(fromX, fromY, toX, toY, durationMs),
         longPress: (x, y, durationMs) => touchNativeModule.longPress(x, y, durationMs),
@@ -679,82 +588,10 @@ function installHarness(): void {
     screenshot: screenshotNative !== null,
     lifecycle: lifecycleNative !== null,
     touchNative: touchNativeModule !== null,
-    pointer: true, // JS pointer harness is always available
   };
 
   const harness: RNDriverGlobal = {
     version: "0.1.0",
-
-    pointer: {
-      tap(x: number, y: number, options?: PointerEventOptions): void {
-        const pointerId = options?.pointerId ?? 0;
-        const data = buildPointerTraceData(x, y, pointerId, options?.pressure);
-        traceEvent("pointer:tap", data);
-        harness.pointer.down(x, y, options);
-        harness.pointer.up(options);
-      },
-
-      down(x: number, y: number, options?: PointerEventOptions): void {
-        const pointerId = options?.pointerId ?? 0;
-        const state = getPointerState(pointerId);
-        state.lastPosition = { x, y };
-        state.isDown = true;
-        traceEvent("pointer:down", buildPointerTraceData(x, y, pointerId, options?.pressure));
-
-        dispatchTouch({
-          x,
-          y,
-          type: "down",
-          timestamp: Date.now(),
-          ...(pointerId !== 0 ? { pointerId } : {}),
-          ...(options?.pressure !== undefined ? { pressure: options.pressure } : {}),
-        });
-      },
-
-      move(x: number, y: number, options?: PointerEventOptions): void {
-        const pointerId = options?.pointerId ?? 0;
-        const state = getPointerState(pointerId);
-        state.lastPosition = { x, y };
-        traceEvent("pointer:move", buildPointerTraceData(x, y, pointerId, options?.pressure));
-
-        dispatchTouch({
-          x,
-          y,
-          type: "move",
-          timestamp: Date.now(),
-          ...(pointerId !== 0 ? { pointerId } : {}),
-          ...(options?.pressure !== undefined ? { pressure: options.pressure } : {}),
-        });
-      },
-
-      up(options?: PointerEventOptions): void {
-        const pointerId = options?.pointerId ?? 0;
-        const state = getPointerState(pointerId);
-        const position = state.lastPosition ?? { x: 0, y: 0 };
-        traceEvent(
-          "pointer:up",
-          buildPointerTraceData(position.x, position.y, pointerId, options?.pressure),
-        );
-        state.isDown = false;
-
-        dispatchTouch({
-          x: position.x,
-          y: position.y,
-          type: "up",
-          timestamp: Date.now(),
-          ...(pointerId !== 0 ? { pointerId } : {}),
-          ...(options?.pressure !== undefined ? { pressure: options.pressure } : {}),
-        });
-      },
-    },
-
-    registerTouchHandler(key: string, handler: TouchHandler): void {
-      handlers.set(key, handler);
-    },
-
-    unregisterTouchHandler(key: string): void {
-      handlers.delete(key);
-    },
 
     viewTree,
     screenshot,
@@ -846,13 +683,6 @@ function installHarness(): void {
     traceEvent,
 
     _internal: {
-      handlers,
-      get lastPosition() {
-        return getPointerState(0).lastPosition;
-      },
-      get isDown() {
-        return getPointerState(0).isDown;
-      },
       get frameCount() {
         return frameCount;
       },

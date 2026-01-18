@@ -82,38 +82,22 @@ export class LocatorImpl implements Locator {
 
   /**
    * Tap the element center.
-   * Uses native tap via viewTree module which handles:
-   * 1. UIControl.sendActions (for native iOS buttons)
-   * 2. accessibilityActivate (for RN Pressable with accessibilityRole)
-   * 3. Synthetic touch event injection (for other RN views)
-   * Falls back to pointer tap if native module unavailable.
+   * Requires RNDriverTouchInjector native module (no JS fallback).
    */
   async tap(): Promise<void> {
     const info = await this.resolve();
 
-    // Try native tap (handles UIControl, accessibility activation, and synthetic touch)
-    const capabilities = await this.device.evaluate<{ viewTree: boolean }>(
-      "globalThis.__RN_DRIVER__.capabilities",
+    const capabilities = await this.device.evaluate<{ touchNative: boolean }>(
+      "globalThis.__RN_DRIVER__?.capabilities ?? { touchNative: false }",
     );
 
-    if (capabilities.viewTree) {
-      const tapResult = await this.device.evaluate<NativeResult<boolean>>(
-        `globalThis.__RN_DRIVER__.viewTree.tap(${JSON.stringify(info.handle)})`,
+    if (!capabilities.touchNative) {
+      throw new LocatorError(
+        "RNDriverTouchInjector native module not installed. Install @0xbigboss/rn-driver-touch and rebuild your app.",
+        "NOT_SUPPORTED",
       );
-
-      if (tapResult.success) {
-        return;
-      }
-      // Native tap failed - throw error with details
-      if (!tapResult.success) {
-        throw new LocatorError(
-          `Native tap failed: ${tapResult.error}`,
-          tapResult.code as "NOT_FOUND" | "TAP_FAILED",
-        );
-      }
     }
 
-    // Fallback: pointer-based tap (when native module not available)
     const center = {
       x: info.bounds.x + info.bounds.width / 2,
       y: info.bounds.y + info.bounds.height / 2,

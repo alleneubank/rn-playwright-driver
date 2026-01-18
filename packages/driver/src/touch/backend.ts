@@ -1,6 +1,6 @@
 import type { LongPressOptions, Point, PointerEventOptions, TapOptions } from "../types";
 
-export type TouchBackendName = "xctest" | "instrumentation" | "native-module" | "cli" | "harness";
+export type TouchBackendName = "xctest" | "instrumentation" | "native-module" | "cli";
 
 export type TouchBackendContext = {
   platform: "ios" | "android";

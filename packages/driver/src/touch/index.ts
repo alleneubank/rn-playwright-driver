@@ -2,14 +2,13 @@ import type { TouchBackendConfig, TouchBackendType } from "../types";
 import type { TouchBackend, TouchBackendContext } from "./backend";
 import { TouchBackendUnavailableError } from "./backend";
 import { CliTouchBackend } from "./cli-backend";
-import { HarnessTouchBackend } from "./harness-backend";
 import { InstrumentationTouchBackend } from "./instrumentation-backend";
 import { NativeModuleTouchBackend } from "./native-module-backend";
 import { XCTestTouchBackend } from "./xctest-backend";
 
 const DEFAULT_ORDER_BY_PLATFORM: Record<"ios" | "android", TouchBackendType[]> = {
-  ios: ["xctest", "native-module", "cli", "harness"],
-  android: ["instrumentation", "native-module", "cli", "harness"],
+  ios: ["native-module"],
+  android: ["native-module"],
 };
 
 export type TouchBackendSelection = {
@@ -76,10 +75,10 @@ export async function createTouchBackend(
     .map((attempt) => `${attempt.backend}: ${attempt.error.message}`)
     .join(" | ");
   throw new TouchBackendUnavailableError(
-    "harness",
+    "native-module",
     attemptSummary.length > 0
       ? `No touch backend available. Attempts: ${attemptSummary}`
-      : "No touch backend available. Configure a touch backend or install the harness.",
+      : "No touch backend available. Install @0xbigboss/rn-driver-touch or configure XCTest/Instrumentation.",
   );
 }
 
@@ -98,8 +97,6 @@ function isBackendSupportedOnPlatform(
 
 function isBackendEnabled(backend: TouchBackendType, config: TouchBackendConfig): boolean {
   switch (backend) {
-    case "harness":
-      return config.harness?.enabled ?? true;
     case "native-module":
       return config.nativeModule?.enabled ?? true;
     case "cli":
@@ -127,8 +124,6 @@ function instantiateBackend(
       return new NativeModuleTouchBackend(context);
     case "cli":
       return new CliTouchBackend();
-    case "harness":
-      return new HarnessTouchBackend(context);
     default: {
       const exhaustive: never = backend;
       throw new Error(`Unhandled backend: ${exhaustive}`);
@@ -144,7 +139,6 @@ export {
   TouchBackendUnavailableError,
 } from "./backend";
 export { CliTouchBackend } from "./cli-backend";
-export { HarnessNotInstalledError, HarnessTouchBackend } from "./harness-backend";
 export { InstrumentationTouchBackend } from "./instrumentation-backend";
 export { NativeModuleTouchBackend } from "./native-module-backend";
 export { XCTestTouchBackend } from "./xctest-backend";

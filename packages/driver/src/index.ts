@@ -25,8 +25,6 @@ export type { TouchBackend, TouchBackendContext, TouchBackendSelection } from ".
 export {
   CliTouchBackend,
   createTouchBackend,
-  HarnessNotInstalledError,
-  HarnessTouchBackend,
   InstrumentationTouchBackend,
   NativeModuleTouchBackend,
   TouchBackendCommandError,

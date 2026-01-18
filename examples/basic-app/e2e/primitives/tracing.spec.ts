@@ -3,8 +3,7 @@
  *
  * Tests startTracing(), stopTracing(), and trace event collection.
  *
- * NOTE: Tests that require pointer operations register a harness touch handler
- * to enable the harness touch backend.
+ * NOTE: Pointer tracing requires RNDriverTouchInjector to be installed.
  */
 
 import type { DriverEvent } from "@0xbigboss/rn-playwright-driver";
@@ -115,23 +114,11 @@ test.describe("Tracing", () => {
     }
   });
 
-  // Pointer-specific tracing tests (require harness touch handler)
+  // Pointer-specific tracing tests
   test.describe("Pointer Tracing", () => {
     test("pointer events are traced", async ({ device }) => {
-      // Register harness touch handler
-      await device.evaluate<void>(`
-        globalThis.__RN_DRIVER__.registerTouchHandler('tracingTest', () => {});
-      `);
-
       await device.startTracing();
-
-      try {
-        await device.pointer.tap(100, 100);
-      } finally {
-        await device.evaluate<void>(`
-          globalThis.__RN_DRIVER__.unregisterTouchHandler('tracingTest');
-        `);
-      }
+      await device.pointer.tap(100, 100);
 
       const result = await device.stopTracing();
 
@@ -142,47 +129,9 @@ test.describe("Tracing", () => {
       expect(pointerEvents.length).toBeGreaterThan(0);
     });
 
-    test("pointer:tap event is traced for tap operation", async ({ device }) => {
-      await device.evaluate<void>(`
-        globalThis.__RN_DRIVER__.registerTouchHandler('tracingTest', () => {});
-      `);
-
-      await device.startTracing();
-
-      try {
-        await device.pointer.tap(150, 200);
-      } finally {
-        await device.evaluate<void>(`
-          globalThis.__RN_DRIVER__.unregisterTouchHandler('tracingTest');
-        `);
-      }
-
-      const result = await device.stopTracing();
-
-      const tapEvents = result.events.filter((e: DriverEvent) => e.type === "pointer:tap");
-      expect(tapEvents.length).toBeGreaterThanOrEqual(1);
-
-      // Check tap event has coordinate data
-      if (tapEvents.length > 0 && tapEvents[0].data) {
-        expect(tapEvents[0].data).toHaveProperty("x");
-        expect(tapEvents[0].data).toHaveProperty("y");
-      }
-    });
-
     test("pointer:move events are traced during drag", async ({ device }) => {
-      await device.evaluate<void>(`
-        globalThis.__RN_DRIVER__.registerTouchHandler('tracingTest', () => {});
-      `);
-
       await device.startTracing();
-
-      try {
-        await device.pointer.drag({ x: 0, y: 0 }, { x: 100, y: 100 }, { steps: 5 });
-      } finally {
-        await device.evaluate<void>(`
-          globalThis.__RN_DRIVER__.unregisterTouchHandler('tracingTest');
-        `);
-      }
+      await device.pointer.drag({ x: 0, y: 0 }, { x: 100, y: 100 }, { steps: 5 });
 
       const result = await device.stopTracing();
 

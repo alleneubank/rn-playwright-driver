@@ -10,8 +10,6 @@ export { getR3FObjectPosition, tapR3FObject, verifyHitTarget } from "./helpers";
 // --- Locator (test-side, but no Playwright dependency) ---
 export type { R3FDeviceNamespace } from "./locator";
 export { createR3FNamespace, R3FLocator } from "./locator";
-export type { R3FTouchAdapterProps } from "./R3FTouchAdapter";
-export { R3FTouchAdapter } from "./R3FTouchAdapter";
 // --- Components (app-side) ---
 export type { TestBridgeProps } from "./TestBridge";
 export { TestBridge } from "./TestBridge";

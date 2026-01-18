@@ -158,22 +158,8 @@ import "@0xbigboss/rn-playwright-driver/harness/dev";
 
 ### Custom Touch Handler
 
-Register a framework-specific touch handler:
-
-```typescript
-// In your app
-import "@0xbigboss/rn-playwright-driver/harness";
-
-// Register custom handler
-globalThis.__RN_DRIVER__.registerTouchHandler("my-adapter", (event) => {
-  // event.type: "down" | "move" | "up"
-  // event.x, event.y: logical points
-  // event.timestamp: Date.now()
-
-  // Forward to your gesture system
-  myGestureSystem.inject(event);
-});
-```
+JS touch handler registration has been removed in favor of native touch injection.
+Use `@0xbigboss/rn-driver-touch` and drive interactions via `device.pointer.*` in tests.
 
 ## Error Handling
 

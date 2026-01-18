@@ -52,8 +52,8 @@ vi.mock("./touch", () => ({
       dispose: vi.fn(),
     },
     selection: {
-      backend: "harness",
-      available: ["harness"],
+      backend: "native-module",
+      available: ["native-module"],
     },
   }),
 }));
@@ -195,8 +195,8 @@ describe("RNDevice Core Primitives", () => {
       const info = await device.getTouchBackendInfo();
 
       expect(info).toEqual({
-        selected: "harness",
-        available: ["harness"],
+        selected: "native-module",
+        available: ["native-module"],
       });
     });
 

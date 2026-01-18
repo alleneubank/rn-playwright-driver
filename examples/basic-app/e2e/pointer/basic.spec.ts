@@ -3,148 +3,103 @@
  *
  * Tests swipe, drag, tap, and other pointer operations.
  *
- * NOTE: These tests require the harness touch handler to be registered
- * for direct pointer operations. Tests using locator.tap() use the
- * viewTree native module instead.
+ * NOTE: These tests require RNDriverTouchInjector to be installed.
  */
 
 import { expect, expectLocator, test } from "@0xbigboss/rn-playwright-driver/test";
 
 test.describe("Gesture Interactions", () => {
-  test("swipe performs smooth gesture", async ({ device }) => {
-    // Register harness touch handler
-    await device.evaluate<void>(`
-      globalThis.__RN_DRIVER__.registerTouchHandler('gestureTest', () => {});
-    `);
+	test("swipe performs smooth gesture", async ({ device }) => {
+		// Get screen dimensions from an element
+		const counter = device.getByTestId("count-display");
+		const bounds = await counter.bounds();
+		expect(bounds).not.toBeNull();
 
-    // Get screen dimensions from an element
-    const counter = device.getByTestId("count-display");
-    const bounds = await counter.bounds();
-    expect(bounds).not.toBeNull();
+		// Perform a vertical swipe
+		const startY = bounds!.y + 100;
+		const endY = bounds!.y + 300;
+		const centerX = bounds!.x + bounds!.width / 2;
 
-    // Perform a vertical swipe
-    const startY = bounds!.y + 100;
-    const endY = bounds!.y + 300;
-    const centerX = bounds!.x + bounds!.width / 2;
+		await device.pointer.swipe({
+			from: { x: centerX, y: startY },
+			to: { x: centerX, y: endY },
+			duration: 300,
+		});
+	});
 
-    try {
-      await device.pointer.swipe({
-        from: { x: centerX, y: startY },
-        to: { x: centerX, y: endY },
-        duration: 300,
-      });
-    } finally {
-      await device.evaluate<void>(`
-        globalThis.__RN_DRIVER__.unregisterTouchHandler('gestureTest');
-      `);
-    }
+	test("swipe with custom duration", async ({ device }) => {
+		const counter = device.getByTestId("count-display");
+		const bounds = await counter.bounds();
+		expect(bounds).not.toBeNull();
 
-    // Swipe completed without error
-  });
+		const centerX = bounds!.x + bounds!.width / 2;
+		const centerY = bounds!.y + bounds!.height / 2;
 
-  test("swipe with custom duration", async ({ device }) => {
-    await device.evaluate<void>(`
-      globalThis.__RN_DRIVER__.registerTouchHandler('gestureTest', () => {});
-    `);
+		// Fast swipe
+		await device.pointer.swipe({
+			from: { x: centerX, y: centerY },
+			to: { x: centerX + 100, y: centerY },
+			duration: 100,
+		});
 
-    const counter = device.getByTestId("count-display");
-    const bounds = await counter.bounds();
-    expect(bounds).not.toBeNull();
+		// Slow swipe
+		await device.pointer.swipe({
+			from: { x: centerX + 100, y: centerY },
+			to: { x: centerX, y: centerY },
+			duration: 500,
+		});
+	});
 
-    const centerX = bounds!.x + bounds!.width / 2;
-    const centerY = bounds!.y + bounds!.height / 2;
+	test("drag performs interpolated movement", async ({ device }) => {
+		const counter = device.getByTestId("count-display");
+		const bounds = await counter.bounds();
+		expect(bounds).not.toBeNull();
 
-    try {
-      // Fast swipe
-      await device.pointer.swipe({
-        from: { x: centerX, y: centerY },
-        to: { x: centerX + 100, y: centerY },
-        duration: 100,
-      });
+		const startX = bounds!.x;
+		const startY = bounds!.y;
 
-      // Slow swipe
-      await device.pointer.swipe({
-        from: { x: centerX + 100, y: centerY },
-        to: { x: centerX, y: centerY },
-        duration: 500,
-      });
-    } finally {
-      await device.evaluate<void>(`
-        globalThis.__RN_DRIVER__.unregisterTouchHandler('gestureTest');
-      `);
-    }
-  });
+		await device.pointer.drag(
+			{ x: startX, y: startY },
+			{ x: startX + 50, y: startY + 50 },
+			{ steps: 5 },
+		);
+	});
 
-  test("drag performs interpolated movement", async ({ device }) => {
-    await device.evaluate<void>(`
-      globalThis.__RN_DRIVER__.registerTouchHandler('gestureTest', () => {});
-    `);
+	test("tap on element center (via locator)", async ({ device }) => {
+		const button = device.getByTestId("increment-button");
+		await expectLocator(button).toBeVisible();
 
-    const counter = device.getByTestId("count-display");
-    const bounds = await counter.bounds();
-    expect(bounds).not.toBeNull();
+		// Tap the button using locator (native touch injection)
+		await button.tap();
 
-    const startX = bounds!.x;
-    const startY = bounds!.y;
+		// Verify the tap was registered by checking counter value changed
+		// (Actual verification depends on app state)
+	});
 
-    try {
-      await device.pointer.drag(
-        { x: startX, y: startY },
-        { x: startX + 50, y: startY + 50 },
-        { steps: 5 },
-      );
-    } finally {
-      await device.evaluate<void>(`
-        globalThis.__RN_DRIVER__.unregisterTouchHandler('gestureTest');
-      `);
-    }
-  });
+	test("pointer down/move/up sequence", async ({ device }) => {
+		const counter = device.getByTestId("count-display");
+		const bounds = await counter.bounds();
+		expect(bounds).not.toBeNull();
 
-  test("tap on element center (via locator)", async ({ device }) => {
-    const button = device.getByTestId("increment-button");
-    await expectLocator(button).toBeVisible();
+		const x = bounds!.x + bounds!.width / 2;
+		const y = bounds!.y + bounds!.height / 2;
 
-    // Tap the button using locator (uses viewTree.tap, not pointer backend)
-    await button.tap();
+		// Manual gesture sequence
+		await device.pointer.down(x, y);
+		await device.pointer.move(x + 10, y);
+		await device.pointer.move(x + 20, y);
+		await device.pointer.up();
+	});
 
-    // Verify the tap was registered by checking counter value changed
-    // (Actual verification depends on app state)
-  });
+	test("multiple taps in sequence (via locator)", async ({ device }) => {
+		const incrementButton = device.getByTestId("increment-button");
+		await expectLocator(incrementButton).toBeVisible();
 
-  test("pointer down/move/up sequence", async ({ device }) => {
-    await device.evaluate<void>(`
-      globalThis.__RN_DRIVER__.registerTouchHandler('gestureTest', () => {});
-    `);
-
-    const counter = device.getByTestId("count-display");
-    const bounds = await counter.bounds();
-    expect(bounds).not.toBeNull();
-
-    const x = bounds!.x + bounds!.width / 2;
-    const y = bounds!.y + bounds!.height / 2;
-
-    try {
-      // Manual gesture sequence
-      await device.pointer.down(x, y);
-      await device.pointer.move(x + 10, y);
-      await device.pointer.move(x + 20, y);
-      await device.pointer.up();
-    } finally {
-      await device.evaluate<void>(`
-        globalThis.__RN_DRIVER__.unregisterTouchHandler('gestureTest');
-      `);
-    }
-  });
-
-  test("multiple taps in sequence (via locator)", async ({ device }) => {
-    const incrementButton = device.getByTestId("increment-button");
-    await expectLocator(incrementButton).toBeVisible();
-
-    // Tap multiple times using locator (uses viewTree.tap)
-    await incrementButton.tap();
-    await device.waitForTimeout(100);
-    await incrementButton.tap();
-    await device.waitForTimeout(100);
-    await incrementButton.tap();
-  });
+		// Tap multiple times using locator (native touch injection)
+		await incrementButton.tap();
+		await device.waitForTimeout(100);
+		await incrementButton.tap();
+		await device.waitForTimeout(100);
+		await incrementButton.tap();
+	});
 });

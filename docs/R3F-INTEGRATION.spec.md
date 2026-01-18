@@ -7,6 +7,8 @@
 
 Three.js/React Three Fiber (R3F) content renders to a GL canvas, bypassing the native view hierarchy. This spec defines how R3F apps integrate with `rn-playwright-driver` for E2E testing.
 
+> **Note**: JS touch handler routing (`registerTouchHandler`) and the R3FTouchAdapter have been removed in favor of native touch injection. Sections describing handler routing are obsolete.
+
 ## Problem Statement
 
 | Feature | Native Views | GL Canvas (R3F) |
@@ -23,7 +25,7 @@ Three.js/React Three Fiber (R3F) content renders to a GL canvas, bypassing the n
 1. **Coordinate-based testing by default** - Tap/drag by screen coordinates works universally
 2. **Optional scene bridge** - Apps can expose R3F internals for richer queries
 3. **Framework-agnostic driver** - No R3F code in the driver package
-4. **Touch handler registration** - Leverage existing `registerTouchHandler` for custom routing
+4. **Native touch injection only** - No JS touch handler routing
 5. **CDP-serializable only** - All bridge methods return JSON-serializable values
 
 ## Architecture

@@ -4,7 +4,7 @@
  * NOTE: These tests require:
  * 1. The RN app running with Metro (bun start)
  * 2. A device connected with Hermes debugging enabled
- * 3. Native modules installed (view-tree, screenshot, lifecycle)
+ * 3. Native modules installed (view-tree, screenshot, lifecycle, touch)
  *
  * Run with: bun run test:e2e
  */
@@ -48,49 +48,23 @@ test.describe("Counter App - Core Features", () => {
   });
 
   test("pointer tap simulates touch", async ({ device }) => {
-    // Register a touch handler to verify taps are dispatched
-    await device.evaluate<void>(`
-      globalThis.__testTouchCount = 0;
-      globalThis.__RN_DRIVER__.registerTouchHandler('test', (e) => {
-        if (e.type === 'down') globalThis.__testTouchCount++;
-      });
-    `);
-
-    // Tap at a coordinate
+    await device.startTracing();
     await device.pointer.tap(100, 200);
+    const result = await device.stopTracing();
 
-    // Verify touch was dispatched
-    const touchCount = await device.evaluate<number>("globalThis.__testTouchCount");
-    expect(touchCount).toBe(1);
-
-    // Clean up
-    await device.evaluate<void>(`
-      globalThis.__RN_DRIVER__.unregisterTouchHandler('test');
-      delete globalThis.__testTouchCount;
-    `);
+    const downEvents = result.events.filter((e) => e.type === "pointer:down");
+    const upEvents = result.events.filter((e) => e.type === "pointer:up");
+    expect(downEvents.length).toBeGreaterThanOrEqual(1);
+    expect(upEvents.length).toBeGreaterThanOrEqual(1);
   });
 
   test("pointer drag interpolates movement", async ({ device }) => {
-    // Register handler to track move events
-    await device.evaluate<void>(`
-      globalThis.__testMoveCount = 0;
-      globalThis.__RN_DRIVER__.registerTouchHandler('test', (e) => {
-        if (e.type === 'move') globalThis.__testMoveCount++;
-      });
-    `);
-
-    // Drag with 5 steps
+    await device.startTracing();
     await device.pointer.drag({ x: 0, y: 0 }, { x: 100, y: 100 }, { steps: 5 });
+    const result = await device.stopTracing();
 
-    // Should have 5 move events (one per step)
-    const moveCount = await device.evaluate<number>("globalThis.__testMoveCount");
-    expect(moveCount).toBe(5);
-
-    // Clean up
-    await device.evaluate<void>(`
-      globalThis.__RN_DRIVER__.unregisterTouchHandler('test');
-      delete globalThis.__testMoveCount;
-    `);
+    const moveEvents = result.events.filter((e) => e.type === "pointer:move");
+    expect(moveEvents.length).toBe(5);
   });
 
   test("waitForFunction polls until truthy", async ({ device }) => {

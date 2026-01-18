@@ -147,7 +147,7 @@ async function main(): Promise<void> {
         console.log(`  viewTree: ${caps.viewTree}`);
         console.log(`  screenshot: ${caps.screenshot}`);
         console.log(`  lifecycle: ${caps.lifecycle}`);
-        console.log(`  pointer: ${caps.pointer}`);
+        console.log(`  touchNative: ${caps.touchNative}`);
 
         if (!caps.viewTree) {
           console.log(

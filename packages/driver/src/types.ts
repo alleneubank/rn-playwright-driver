@@ -32,8 +32,6 @@ export interface Capabilities {
   lifecycle: boolean;
   /** Native touch injector module available */
   touchNative: boolean;
-  /** JS pointer/touch harness available */
-  pointer: boolean;
 }
 
 // --- Harness loading modes ---
@@ -114,7 +112,7 @@ export type SwipeOptions = TimingOptions &
     to: Point;
   };
 
-export type TouchBackendType = "xctest" | "instrumentation" | "native-module" | "cli" | "harness";
+export type TouchBackendType = "xctest" | "instrumentation" | "native-module" | "cli";
 
 // --- Window Metrics ---
 
@@ -299,16 +297,12 @@ export type TouchBackendConfig = {
     connectTimeoutMs?: number;
     requestTimeoutMs?: number;
   };
-  /** Enable native-module backend (requires RNDriverTouchInjector) */
+  /** Enable native-module backend (requires RNDriverTouchInjector / @0xbigboss/rn-driver-touch) */
   nativeModule?: {
     enabled?: boolean;
   };
   /** Enable CLI backend (idb/adb) */
   cli?: {
-    enabled?: boolean;
-  };
-  /** Enable JS harness backend */
-  harness?: {
     enabled?: boolean;
   };
 };

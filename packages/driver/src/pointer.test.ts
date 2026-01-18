@@ -6,6 +6,18 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { Pointer } from "./pointer";
 import type { TouchBackend } from "./touch";
 
+type MockTouchBackend = TouchBackend & {
+  tap: ReturnType<typeof vi.fn>;
+  down: ReturnType<typeof vi.fn>;
+  move: ReturnType<typeof vi.fn>;
+  up: ReturnType<typeof vi.fn>;
+  swipe: ReturnType<typeof vi.fn>;
+  longPress: ReturnType<typeof vi.fn>;
+  typeText: ReturnType<typeof vi.fn>;
+  init: ReturnType<typeof vi.fn>;
+  dispose: ReturnType<typeof vi.fn>;
+};
+
 // TimeoutProvider interface for pointer (avoid importing private type)
 interface TimeoutProvider {
   waitForTimeout(ms: number): Promise<void>;
@@ -15,12 +27,12 @@ const FRAME_DELAY_MS = 16;
 
 describe("Pointer Path Methods", () => {
   let pointer: Pointer;
-  let mockBackend: TouchBackend;
+  let mockBackend: MockTouchBackend;
   let mockTimeoutProvider: TimeoutProvider;
 
   beforeEach(() => {
     mockBackend = {
-      name: "harness",
+      name: "native-module",
       init: vi.fn().mockResolvedValue(undefined),
       dispose: vi.fn().mockResolvedValue(undefined),
       tap: vi.fn().mockResolvedValue(undefined),
