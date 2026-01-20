@@ -42,6 +42,7 @@
         "rn-inspect": "./bin/inspect.ts",
       },
       "dependencies": {
+        "@0xbigboss/rn-driver-shared-types": "workspace:*",
         "pixelmatch": "^7.1.0",
         "pngjs": "^7.0.0",
         "ws": "^8.18.3",
@@ -76,6 +77,9 @@
     "packages/lifecycle": {
       "name": "@0xbigboss/rn-driver-lifecycle",
       "version": "0.1.0",
+      "dependencies": {
+        "@0xbigboss/rn-driver-shared-types": "workspace:*",
+      },
       "devDependencies": {
         "@biomejs/biome": "^2.3.10",
         "@typescript/native-preview": "^7.0.0-dev.20251227.1",
@@ -92,7 +96,7 @@
     },
     "packages/r3f": {
       "name": "@0xbigboss/rn-driver-r3f",
-      "version": "0.1.9",
+      "version": "0.2.0",
       "devDependencies": {
         "@biomejs/biome": "^2.3.10",
         "@playwright/test": "^1.52.0",
@@ -138,6 +142,9 @@
     "packages/screenshot": {
       "name": "@0xbigboss/rn-driver-screenshot",
       "version": "0.1.0",
+      "dependencies": {
+        "@0xbigboss/rn-driver-shared-types": "workspace:*",
+      },
       "devDependencies": {
         "@biomejs/biome": "^2.3.10",
         "@typescript/native-preview": "^7.0.0-dev.20251227.1",
@@ -152,9 +159,21 @@
         "react-native": "*",
       },
     },
+    "packages/shared-types": {
+      "name": "@0xbigboss/rn-driver-shared-types",
+      "version": "0.1.0",
+      "devDependencies": {
+        "@biomejs/biome": "^2.3.10",
+        "@typescript/native-preview": "^7.0.0-dev.20251227.1",
+        "typescript": "^5.9.3",
+      },
+    },
     "packages/view-tree": {
       "name": "@0xbigboss/rn-driver-view-tree",
       "version": "0.1.0",
+      "dependencies": {
+        "@0xbigboss/rn-driver-shared-types": "workspace:*",
+      },
       "devDependencies": {
         "@biomejs/biome": "^2.3.10",
         "@typescript/native-preview": "^7.0.0-dev.20251227.1",
@@ -182,6 +201,8 @@
     "@0xbigboss/rn-driver-r3f": ["@0xbigboss/rn-driver-r3f@workspace:packages/r3f"],
 
     "@0xbigboss/rn-driver-screenshot": ["@0xbigboss/rn-driver-screenshot@workspace:packages/screenshot"],
+
+    "@0xbigboss/rn-driver-shared-types": ["@0xbigboss/rn-driver-shared-types@workspace:packages/shared-types"],
 
     "@0xbigboss/rn-driver-touch": ["@0xbigboss/rn-driver-touch@workspace:packages/rn-driver-touch"],
 

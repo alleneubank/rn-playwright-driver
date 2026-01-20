@@ -1,8 +1,9 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import type { ElementInfo, NativeResult } from "@0xbigboss/rn-driver-shared-types";
 import pixelmatch from "pixelmatch";
 import { PNG } from "pngjs";
-import type { ElementInfo, LocatorImpl } from "./locator";
+import type { LocatorImpl } from "./locator";
 import type { Locator } from "./types";
 
 /** Default timeout for assertions in milliseconds */
@@ -109,8 +110,6 @@ export interface LocatorAssertions {
   toMatchSnapshot(nameOrOptions?: string | SnapshotOptions): Promise<void>;
 }
 
-type NativeResult<T> = { success: true; data: T } | { success: false; error: string; code: string };
-
 type ImageCompareResult =
   | { passed: true }
   | { passed: false; diffPixelRatio: number; diffImage?: Buffer; sizeMismatch?: SizeMismatch };
@@ -176,6 +175,8 @@ function createLocatorAssertions(locator: Locator): LocatorAssertions {
   // Cast to LocatorImpl to access getElementInfo method
   const locatorImpl = locator as LocatorImpl;
 
+  type FailedResult = Extract<NativeResult<ElementInfo>, { success: false }>;
+
   const queryElement = async (): Promise<NativeResult<ElementInfo>> => {
     // Use the locator's getElementInfo method to get real element data
     // including text, enabled state, etc.
@@ -208,112 +209,118 @@ function createLocatorAssertions(locator: Locator): LocatorAssertions {
     throw new AssertionError(lastError ?? `Assertion timed out after ${timeout}ms`);
   };
 
+  const pollElementAssertion = async (
+    evaluate: (element: ElementInfo) => { passed: boolean; error?: string },
+    options?: AssertionOptions,
+    onMissing?: (result: FailedResult) => { passed: boolean; error?: string },
+  ): Promise<void> => {
+    await pollUntil(async () => {
+      const result = await queryElement();
+      if (!result.success) {
+        if (onMissing) {
+          return onMissing(result);
+        }
+        return { passed: false, error: "Element not found" };
+      }
+      return evaluate(result.data);
+    }, options);
+  };
+
+  const buildTextAssertion = (
+    text: string,
+    options: TextAssertionOptions | undefined,
+    expectMatch: boolean,
+    includeActual: boolean,
+  ): ((element: ElementInfo) => { passed: boolean; error?: string }) => {
+    return (element) => {
+      const elementText = element.text ?? "";
+      const hasText = options?.exact ? elementText === text : elementText.includes(text);
+      const passed = expectMatch ? hasText : !hasText;
+      if (expectMatch) {
+        const error = includeActual
+          ? `Expected element to have text "${text}", got "${elementText}"`
+          : `Expected element to have text "${text}"`;
+        return { passed, error };
+      }
+      return { passed, error: `Expected element to not have text "${text}"` };
+    };
+  };
+
   return {
     async toBeVisible(options?: AssertionOptions): Promise<void> {
-      await pollUntil(async () => {
-        const result = await queryElement();
-        if (!result.success) {
+      await pollElementAssertion(
+        (element) => ({
+          passed: element.visible,
+          error: "Expected element to be visible",
+        }),
+        options,
+        (result) => {
           // NOT_FOUND should keep polling (element may appear)
           if (result.code === "NOT_FOUND") {
             return { passed: false, error: "Expected element to be visible" };
           }
-          // Other errors (MULTIPLE_FOUND, NOT_SUPPORTED, etc.) fail fast
+          // Other errors (MULTIPLE_FOUND, NOT_SUPPORTED, etc.) surface the error
           return { passed: false, error: result.error };
-        }
-        return {
-          passed: result.data.visible,
-          error: "Expected element to be visible",
-        };
-      }, options);
+        },
+      );
     },
 
     not: {
       async toBeVisible(options?: AssertionOptions): Promise<void> {
-        await pollUntil(async () => {
-          const result = await queryElement();
-          if (!result.success) {
+        await pollElementAssertion(
+          (element) => ({
+            passed: !element.visible,
+            error: "Expected element to not be visible",
+          }),
+          options,
+          (result) => {
             // NOT_FOUND means element doesn't exist, so it's not visible - pass
             if (result.code === "NOT_FOUND") {
               return { passed: true };
             }
             // Other errors (INTERNAL, MULTIPLE_FOUND, etc.) should fail with the error
             return { passed: false, error: result.error };
-          }
-          return {
-            passed: !result.data.visible,
-            error: "Expected element to not be visible",
-          };
-        }, options);
+          },
+        );
       },
 
       async toBeEnabled(options?: AssertionOptions): Promise<void> {
-        await pollUntil(async () => {
-          const result = await queryElement();
-          if (!result.success) {
-            return { passed: false, error: "Element not found" };
-          }
-          return {
-            passed: !result.data.enabled,
+        await pollElementAssertion(
+          (element) => ({
+            passed: !element.enabled,
             error: "Expected element to not be enabled",
-          };
-        }, options);
+          }),
+          options,
+        );
       },
 
       async toHaveText(text: string, options?: TextAssertionOptions): Promise<void> {
-        await pollUntil(async () => {
-          const result = await queryElement();
-          if (!result.success) {
-            return { passed: false, error: "Element not found" };
-          }
-          const elementText = result.data.text ?? "";
-          const hasText = options?.exact ? elementText === text : elementText.includes(text);
-          return {
-            passed: !hasText,
-            error: `Expected element to not have text "${text}"`,
-          };
-        }, options);
+        await pollElementAssertion(buildTextAssertion(text, options, false, false), options);
       },
     },
 
     async toHaveText(text: string, options?: TextAssertionOptions): Promise<void> {
-      await pollUntil(async () => {
-        const result = await queryElement();
-        if (!result.success) {
-          return { passed: false, error: "Element not found" };
-        }
-        const elementText = result.data.text ?? "";
-        const hasText = options?.exact ? elementText === text : elementText.includes(text);
-        return {
-          passed: hasText,
-          error: `Expected element to have text "${text}", got "${elementText}"`,
-        };
-      }, options);
+      await pollElementAssertion(buildTextAssertion(text, options, true, true), options);
     },
 
     async toBeEnabled(options?: AssertionOptions): Promise<void> {
-      await pollUntil(async () => {
-        const result = await queryElement();
-        if (!result.success) {
-          return { passed: false, error: "Element not found" };
-        }
-        return {
-          passed: result.data.enabled,
+      await pollElementAssertion(
+        (element) => ({
+          passed: element.enabled,
           error: "Expected element to be enabled",
-        };
-      }, options);
+        }),
+        options,
+      );
     },
 
     async toBeDisabled(options?: AssertionOptions): Promise<void> {
-      await pollUntil(async () => {
-        const result = await queryElement();
-        if (!result.success) {
-          return { passed: false, error: "Element not found" };
-        }
-        return {
-          passed: !result.data.enabled,
+      await pollElementAssertion(
+        (element) => ({
+          passed: !element.enabled,
           error: "Expected element to be disabled",
-        };
-      }, options);
+        }),
+        options,
+      );
     },
 
     async toBeAttached(options?: AssertionOptions): Promise<void> {

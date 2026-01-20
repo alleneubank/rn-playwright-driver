@@ -26,6 +26,7 @@ This document describes the complete architecture for Phase 3 native modules in 
 | Package | Purpose | Status |
 |---------|---------|--------|
 | `@0xbigboss/rn-playwright-driver` | Test driver (no native code) | ✅ Complete |
+| `@0xbigboss/rn-driver-shared-types` | Shared types across driver and native modules | ✅ Complete |
 | `@0xbigboss/rn-driver-view-tree` | Element queries, bounds, visibility | ✅ Complete |
 | `@0xbigboss/rn-driver-screenshot` | Screen/element capture | ✅ Complete |
 | `@0xbigboss/rn-driver-lifecycle` | App state control | 🔶 Partial |
@@ -476,6 +477,7 @@ export type RNDriverGlobal = {
     getBounds: (handle: string) => Promise<NativeResult<ElementBounds | null>>;
     isVisible: (handle: string) => Promise<NativeResult<boolean>>;
     isEnabled: (handle: string) => Promise<NativeResult<boolean>>;
+    tap: (handle: string) => Promise<NativeResult<boolean>>;
   };
 
   screenshot: {
@@ -502,8 +504,11 @@ export type RNDriverGlobal = {
 
   // Feature detection
   capabilities: {
+    apiVersion: number;
     viewTree: boolean;
+    viewTreeTap: boolean;
     screenshot: boolean;
+    screenshotCaptureElement: boolean;
     lifecycle: boolean;
     touchNative: boolean;
   };
@@ -516,8 +521,11 @@ export type RNDriverGlobal = {
 // In harness installation
 function detectCapabilities(): Capabilities {
   return {
+    apiVersion: 1,
     viewTree: typeof ViewTreeModule?.findByTestId === 'function',
+    viewTreeTap: typeof ViewTreeModule?.tap === 'function',
     screenshot: typeof ScreenshotModule?.captureScreen === 'function',
+    screenshotCaptureElement: typeof ScreenshotModule?.captureElement === 'function',
     lifecycle: typeof LifecycleModule?.openURL === 'function',
     touchNative: typeof TouchNativeModule?.tap === 'function',
   };
@@ -606,6 +614,11 @@ rn-playwright-driver/                      # Monorepo root
 │   │   │   └── test.ts
 │   │   ├── harness/
 │   │   │   └── index.ts                   # Extended for Phase 3
+│   │   └── package.json
+│   │
+│   ├── shared-types/                      # @0xbigboss/rn-driver-shared-types
+│   │   ├── src/
+│   │   │   └── index.ts
 │   │   └── package.json
 │   │
 │   ├── view-tree/                         # @0xbigboss/rn-driver-view-tree

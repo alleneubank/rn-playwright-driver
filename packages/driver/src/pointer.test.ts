@@ -3,27 +3,13 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { Pointer } from "./pointer";
-import type { TouchBackend } from "./touch";
-
-type MockTouchBackend = TouchBackend & {
-  tap: ReturnType<typeof vi.fn>;
-  down: ReturnType<typeof vi.fn>;
-  move: ReturnType<typeof vi.fn>;
-  up: ReturnType<typeof vi.fn>;
-  swipe: ReturnType<typeof vi.fn>;
-  longPress: ReturnType<typeof vi.fn>;
-  typeText: ReturnType<typeof vi.fn>;
-  init: ReturnType<typeof vi.fn>;
-  dispose: ReturnType<typeof vi.fn>;
-};
-
-// TimeoutProvider interface for pointer (avoid importing private type)
-interface TimeoutProvider {
-  waitForTimeout(ms: number): Promise<void>;
-}
-
-const FRAME_DELAY_MS = 16;
+import type { Pointer } from "./pointer";
+import {
+  createPointerHarness,
+  FRAME_MS,
+  type MockTouchBackend,
+  type TimeoutProvider,
+} from "./test-utils";
 
 describe("Pointer Path Methods", () => {
   let pointer: Pointer;
@@ -31,24 +17,7 @@ describe("Pointer Path Methods", () => {
   let mockTimeoutProvider: TimeoutProvider;
 
   beforeEach(() => {
-    mockBackend = {
-      name: "native-module",
-      init: vi.fn().mockResolvedValue(undefined),
-      dispose: vi.fn().mockResolvedValue(undefined),
-      tap: vi.fn().mockResolvedValue(undefined),
-      down: vi.fn().mockResolvedValue(undefined),
-      move: vi.fn().mockResolvedValue(undefined),
-      up: vi.fn().mockResolvedValue(undefined),
-      swipe: vi.fn().mockResolvedValue(undefined),
-      longPress: vi.fn().mockResolvedValue(undefined),
-      typeText: vi.fn().mockResolvedValue(undefined),
-    };
-
-    mockTimeoutProvider = {
-      waitForTimeout: vi.fn().mockResolvedValue(undefined),
-    };
-
-    pointer = new Pointer(mockBackend, mockTimeoutProvider);
+    ({ pointer, mockBackend, mockTimeoutProvider } = createPointerHarness());
   });
 
   describe("move", () => {
@@ -67,8 +36,8 @@ describe("Pointer Path Methods", () => {
       await pointer.drag({ x: 0, y: 0 }, { x: 10, y: 10 });
 
       expect(mockTimeoutProvider.waitForTimeout).toHaveBeenCalledTimes(2);
-      expect(mockTimeoutProvider.waitForTimeout).toHaveBeenNthCalledWith(1, FRAME_DELAY_MS);
-      expect(mockTimeoutProvider.waitForTimeout).toHaveBeenNthCalledWith(2, FRAME_DELAY_MS);
+      expect(mockTimeoutProvider.waitForTimeout).toHaveBeenNthCalledWith(1, FRAME_MS);
+      expect(mockTimeoutProvider.waitForTimeout).toHaveBeenNthCalledWith(2, FRAME_MS);
     });
 
     it("should apply custom holdStart/holdEnd delays", async () => {
@@ -177,10 +146,10 @@ describe("Pointer Path Methods", () => {
 
       // Delay should be applied after each move, plus frame delays for down/up.
       expect(mockTimeoutProvider.waitForTimeout).toHaveBeenCalledTimes(4);
-      expect(mockTimeoutProvider.waitForTimeout).toHaveBeenNthCalledWith(1, FRAME_DELAY_MS);
+      expect(mockTimeoutProvider.waitForTimeout).toHaveBeenNthCalledWith(1, FRAME_MS);
       expect(mockTimeoutProvider.waitForTimeout).toHaveBeenNthCalledWith(2, 50);
       expect(mockTimeoutProvider.waitForTimeout).toHaveBeenNthCalledWith(3, 50);
-      expect(mockTimeoutProvider.waitForTimeout).toHaveBeenNthCalledWith(4, FRAME_DELAY_MS);
+      expect(mockTimeoutProvider.waitForTimeout).toHaveBeenNthCalledWith(4, FRAME_MS);
     });
 
     it("should not apply delay when delay is 0", async () => {
@@ -192,8 +161,8 @@ describe("Pointer Path Methods", () => {
       await pointer.dragPath(points, { delay: 0 });
 
       expect(mockTimeoutProvider.waitForTimeout).toHaveBeenCalledTimes(2);
-      expect(mockTimeoutProvider.waitForTimeout).toHaveBeenNthCalledWith(1, FRAME_DELAY_MS);
-      expect(mockTimeoutProvider.waitForTimeout).toHaveBeenNthCalledWith(2, FRAME_DELAY_MS);
+      expect(mockTimeoutProvider.waitForTimeout).toHaveBeenNthCalledWith(1, FRAME_MS);
+      expect(mockTimeoutProvider.waitForTimeout).toHaveBeenNthCalledWith(2, FRAME_MS);
     });
 
     it("should skip hold delays when set to 0", async () => {

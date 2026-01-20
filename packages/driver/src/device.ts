@@ -1,7 +1,8 @@
 import { CDPClient, type CDPClientOptions } from "./cdp/client";
 import { discoverTargets, selectTarget } from "./cdp/discovery";
-import type { Locator, LocatorSelector } from "./locator";
-import { createLocator, LocatorError } from "./locator";
+import { buildCapabilitiesExpression, buildHarnessCall } from "./harness-expressions";
+import type { Locator } from "./locator";
+import { buildRoleSelector, createLocator, LocatorError } from "./locator";
 import { Pointer } from "./pointer";
 import { createTouchBackend, type TouchBackend } from "./touch";
 import type {
@@ -135,11 +136,7 @@ export class RNDevice implements Device {
   }
 
   getByRole(role: string, options?: { name?: string }): Locator {
-    const selector: LocatorSelector = { type: "role", value: role };
-    if (options?.name !== undefined) {
-      selector.name = options.name;
-    }
-    return createLocator(this, selector);
+    return createLocator(this, buildRoleSelector(role, options));
   }
 
   // --- Pointer/Touch (Phase 2) ---
@@ -156,18 +153,16 @@ export class RNDevice implements Device {
     if (options?.clip) {
       // Capture specific region
       const { x, y, width, height } = options.clip;
-      result = await this.evaluate<NativeResult<string>>(`
-        globalThis.__RN_DRIVER__.screenshot.captureRegion({
-          x: ${x},
-          y: ${y},
-          width: ${width},
-          height: ${height}
-        })
-      `);
+      result = await this.evaluate<NativeResult<string>>(
+        buildHarnessCall(
+          "screenshot.captureRegion",
+          `{ x: ${x}, y: ${y}, width: ${width}, height: ${height} }`,
+        ),
+      );
     } else {
       // Capture full screen
       result = await this.evaluate<NativeResult<string>>(
-        "globalThis.__RN_DRIVER__.screenshot.captureScreen()",
+        buildHarnessCall("screenshot.captureScreen"),
       );
     }
 
@@ -183,7 +178,7 @@ export class RNDevice implements Device {
 
   async openURL(url: string): Promise<void> {
     const result = await this.evaluate<NativeResult<void>>(
-      `globalThis.__RN_DRIVER__.lifecycle.openURL(${JSON.stringify(url)})`,
+      buildHarnessCall("lifecycle.openURL", JSON.stringify(url)),
     );
 
     if (!result.success) {
@@ -192,9 +187,7 @@ export class RNDevice implements Device {
   }
 
   async reload(): Promise<void> {
-    const result = await this.evaluate<NativeResult<void>>(
-      "globalThis.__RN_DRIVER__.lifecycle.reload()",
-    );
+    const result = await this.evaluate<NativeResult<void>>(buildHarnessCall("lifecycle.reload"));
 
     if (!result.success) {
       throw new LocatorError(result.error, result.code);
@@ -203,7 +196,7 @@ export class RNDevice implements Device {
 
   async background(): Promise<void> {
     const result = await this.evaluate<NativeResult<void>>(
-      "globalThis.__RN_DRIVER__.lifecycle.background()",
+      buildHarnessCall("lifecycle.background"),
     );
 
     if (!result.success) {
@@ -213,7 +206,7 @@ export class RNDevice implements Device {
 
   async foreground(): Promise<void> {
     const result = await this.evaluate<NativeResult<void>>(
-      "globalThis.__RN_DRIVER__.lifecycle.foreground()",
+      buildHarnessCall("lifecycle.foreground"),
     );
 
     if (!result.success) {
@@ -224,9 +217,7 @@ export class RNDevice implements Device {
   // --- Capabilities Detection ---
 
   async capabilities(): Promise<Capabilities> {
-    return this.evaluate<Capabilities>(
-      "globalThis.__RN_DRIVER__?.capabilities ?? { viewTree: false, screenshot: false, lifecycle: false, touchNative: false }",
-    );
+    return this.evaluate<Capabilities>(buildCapabilitiesExpression());
   }
 
   // --- Utilities (Phase 1) ---
@@ -259,11 +250,11 @@ export class RNDevice implements Device {
   // --- Core Primitives ---
 
   async getWindowMetrics(): Promise<WindowMetrics> {
-    return this.evaluate<WindowMetrics>("globalThis.__RN_DRIVER__.getWindowMetrics()");
+    return this.evaluate<WindowMetrics>(buildHarnessCall("getWindowMetrics"));
   }
 
   async getFrameCount(): Promise<number> {
-    return this.evaluate<number>("globalThis.__RN_DRIVER__.getFrameCount()");
+    return this.evaluate<number>(buildHarnessCall("getFrameCount"));
   }
 
   async waitForRaf(count: number = 1): Promise<void> {
@@ -297,11 +288,11 @@ export class RNDevice implements Device {
 
   async startTracing(options?: TracingOptions): Promise<void> {
     const optionsJson = JSON.stringify(options ?? {});
-    await this.evaluate(`globalThis.__RN_DRIVER__.startTracing(${optionsJson})`);
+    await this.evaluate(buildHarnessCall("startTracing", optionsJson));
   }
 
   async stopTracing(): Promise<{ events: DriverEvent[] }> {
-    return this.evaluate<{ events: DriverEvent[] }>("globalThis.__RN_DRIVER__.stopTracing()");
+    return this.evaluate<{ events: DriverEvent[] }>(buildHarnessCall("stopTracing"));
   }
 
   // --- Platform Info ---

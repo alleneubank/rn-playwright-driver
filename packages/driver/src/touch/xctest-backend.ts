@@ -7,19 +7,13 @@ import {
   TouchBackendError,
   TouchBackendUnavailableError,
 } from "./backend";
+import {
+  resolveLongPressDuration,
+  resolveTouchBackendOptions,
+  type TouchBackendOptions,
+} from "./backend-options";
 
-export type XCTestBackendOptions = {
-  host?: string;
-  port?: number;
-  url?: string;
-  connectTimeoutMs?: number;
-  requestTimeoutMs?: number;
-};
-
-const DEFAULT_HOST = "127.0.0.1";
-const DEFAULT_PORT = 9999;
-const DEFAULT_CONNECT_TIMEOUT = 2_000;
-const DEFAULT_REQUEST_TIMEOUT = 10_000;
+export type XCTestBackendOptions = TouchBackendOptions;
 const PROTOCOL_VERSION = 1;
 
 type TouchRequest =
@@ -180,11 +174,10 @@ export class XCTestTouchBackend implements TouchBackend {
   private readonly client: WsRpcClient;
 
   constructor(options: XCTestBackendOptions = {}) {
-    const host = options.host ?? DEFAULT_HOST;
-    const port = options.port ?? DEFAULT_PORT;
-    this.url = options.url ?? `ws://${host}:${port}`;
-    this.connectTimeoutMs = options.connectTimeoutMs ?? DEFAULT_CONNECT_TIMEOUT;
-    this.requestTimeoutMs = options.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT;
+    const resolved = resolveTouchBackendOptions(options, (host, port) => `ws://${host}:${port}`);
+    this.url = resolved.url;
+    this.connectTimeoutMs = resolved.connectTimeoutMs;
+    this.requestTimeoutMs = resolved.requestTimeoutMs;
     this.client = new WsRpcClient(this.requestTimeoutMs);
   }
 
@@ -222,7 +215,7 @@ export class XCTestTouchBackend implements TouchBackend {
   }
 
   async longPress(x: number, y: number, options: LongPressOptions): Promise<void> {
-    const durationMs = options?.duration ?? 500;
+    const durationMs = resolveLongPressDuration(options);
     await this.client.request({ type: "longPress", x, y, durationMs });
   }
 

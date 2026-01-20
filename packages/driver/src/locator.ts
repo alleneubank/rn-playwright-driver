@@ -1,4 +1,13 @@
-import type { ElementBounds, Locator, TapOptions, WaitForOptions, WaitForState } from "./types";
+import type { ElementInfo, NativeResult } from "@0xbigboss/rn-driver-shared-types";
+import { buildHarnessCall } from "./harness-expressions";
+import type {
+  Capabilities,
+  ElementBounds,
+  Locator,
+  TapOptions,
+  WaitForOptions,
+  WaitForState,
+} from "./types";
 
 /**
  * Parent context for scoped queries.
@@ -27,28 +36,10 @@ interface Evaluator {
     tap(x: number, y: number, options?: TapOptions): Promise<void>;
   };
   waitForTimeout(ms: number): Promise<void>;
+  capabilities(): Promise<Capabilities>;
   /** Platform for conditional behavior */
   platform: "ios" | "android";
 }
-
-/**
- * Element info from native module.
- */
-export type ElementInfo = {
-  handle: string;
-  testId: string | null;
-  text: string | null;
-  role: string | null;
-  label: string | null;
-  bounds: ElementBounds;
-  visible: boolean;
-  enabled: boolean;
-};
-
-/**
- * Result type from native module calls.
- */
-type NativeResult<T> = { success: true; data: T } | { success: false; error: string; code: string };
 
 /**
  * Error thrown when a locator operation fails.
@@ -83,13 +74,11 @@ export class LocatorImpl implements Locator {
   /**
    * Tap the element center.
    * Requires RNDriverTouchInjector native module (no JS fallback).
+   * Auto-waits for element to be visible and enabled.
    */
   async tap(): Promise<void> {
-    const info = await this.resolve();
-
-    const capabilities = await this.device.evaluate<{ touchNative: boolean }>(
-      "globalThis.__RN_DRIVER__?.capabilities ?? { touchNative: false }",
-    );
+    const info = await this.waitForActionable();
+    const capabilities = await this.device.capabilities();
 
     if (!capabilities.touchNative) {
       throw new LocatorError(
@@ -241,7 +230,7 @@ export class LocatorImpl implements Locator {
 
     // Use captureElement which orchestrates viewTree + screenshot in harness
     const result = await this.device.evaluate<NativeResult<string>>(
-      `globalThis.__RN_DRIVER__.screenshot.captureElement(${JSON.stringify(info.handle)})`,
+      buildHarnessCall("screenshot.captureElement", JSON.stringify(info.handle)),
     );
 
     if (!result.success) {
@@ -332,11 +321,7 @@ export class LocatorImpl implements Locator {
    * Scoped queries filter results to elements within this element's bounds.
    */
   getByRole(role: string, options?: { name?: string }): Locator {
-    const selector: LocatorSelector = { type: "role", value: role };
-    if (options?.name !== undefined) {
-      selector.name = options.name;
-    }
-    return new ScopedLocatorImpl(this.device, selector, this);
+    return new ScopedLocatorImpl(this.device, buildRoleSelector(role, options), this);
   }
 
   /**
@@ -369,6 +354,40 @@ export class LocatorImpl implements Locator {
       throw new LocatorError(result.error, result.code);
     }
     return result.data;
+  }
+
+  /**
+   * Wait for element to be visible and enabled, returning latest element info.
+   */
+  private async waitForActionable(): Promise<ElementInfo> {
+    const timeout = DEFAULT_WAIT_TIMEOUT;
+    const startTime = Date.now();
+
+    while (Date.now() - startTime < timeout) {
+      const result = await this.query();
+
+      if (!result.success) {
+        if (
+          result.code === "NOT_SUPPORTED" ||
+          result.code === "INTERNAL" ||
+          result.code === "MULTIPLE_FOUND"
+        ) {
+          throw new LocatorError(result.error, result.code);
+        }
+
+        // NOT_FOUND/NOT_VISIBLE/NOT_ENABLED should retry
+        await this.device.waitForTimeout(DEFAULT_POLLING_INTERVAL);
+        continue;
+      }
+
+      if (result.data.visible && result.data.enabled) {
+        return result.data;
+      }
+
+      await this.device.waitForTimeout(DEFAULT_POLLING_INTERVAL);
+    }
+
+    throw new LocatorError(`tap() timed out after ${timeout}ms for ${this.toString()}`, "TIMEOUT");
   }
 
   /**
@@ -408,8 +427,7 @@ export class LocatorImpl implements Locator {
 
     // If parent context is present, always use findAllBy* and filter
     if (parent !== undefined) {
-      const expr = this.buildAllQueryExpression();
-      const result = await this.device.evaluate<NativeResult<ElementInfo[]>>(expr);
+      const result = await this.evaluateAllElements();
 
       if (!result.success) {
         return result as NativeResult<ElementInfo>;
@@ -417,28 +435,10 @@ export class LocatorImpl implements Locator {
 
       // Filter to elements within parent bounds
       const filtered = this.filterByParent(result.data, parent);
-
-      if (filtered.length === 0) {
-        return {
-          success: false,
-          error: `No elements found within parent for ${this.toString()}`,
-          code: "NOT_FOUND",
-        };
-      }
-
-      // Apply index selection
-      const targetIndex = index ?? 0;
-      const actualIndex = targetIndex < 0 ? filtered.length + targetIndex : targetIndex;
-
-      if (actualIndex < 0 || actualIndex >= filtered.length) {
-        return {
-          success: false,
-          error: `Index ${targetIndex} out of bounds (found ${filtered.length} elements in parent)`,
-          code: "NOT_FOUND",
-        };
-      }
-
-      return { success: true, data: filtered[actualIndex] };
+      return this.selectElementFromList(filtered, index, {
+        emptySuffix: " within parent",
+        boundsSuffix: " in parent",
+      });
     }
 
     // No parent context - use original logic
@@ -449,34 +449,16 @@ export class LocatorImpl implements Locator {
     }
 
     // Use findAllBy* and select by index
-    const expr = this.buildAllQueryExpression();
-    const result = await this.device.evaluate<NativeResult<ElementInfo[]>>(expr);
+    const result = await this.evaluateAllElements();
 
     if (!result.success) {
       return result as NativeResult<ElementInfo>;
     }
 
-    const elements = result.data;
-    if (elements.length === 0) {
-      return {
-        success: false,
-        error: `No elements found for ${this.toString()}`,
-        code: "NOT_FOUND",
-      };
-    }
-
-    // Handle negative index (e.g., -1 for last)
-    const actualIndex = index < 0 ? elements.length + index : index;
-
-    if (actualIndex < 0 || actualIndex >= elements.length) {
-      return {
-        success: false,
-        error: `Index ${index} out of bounds (found ${elements.length} elements)`,
-        code: "NOT_FOUND",
-      };
-    }
-
-    return { success: true, data: elements[actualIndex] };
+    return this.selectElementFromList(result.data, index, {
+      emptySuffix: "",
+      boundsSuffix: "",
+    });
   }
 
   /**
@@ -491,34 +473,68 @@ export class LocatorImpl implements Locator {
    * Build expression for single-element query.
    */
   protected buildSingleQueryExpression(): string {
-    switch (this.selector.type) {
-      case "testId":
-        return `globalThis.__RN_DRIVER__.viewTree.findByTestId(${JSON.stringify(this.selector.value)})`;
-      case "text":
-        return `globalThis.__RN_DRIVER__.viewTree.findByText(${JSON.stringify(this.selector.value)}, ${this.selector.exact})`;
-      case "role": {
-        const nameArg =
-          this.selector.name !== undefined ? JSON.stringify(this.selector.name) : "undefined";
-        return `globalThis.__RN_DRIVER__.viewTree.findByRole(${JSON.stringify(this.selector.value)}, ${nameArg})`;
-      }
-    }
+    return this.buildQueryExpression("single");
   }
 
   /**
    * Build expression for multi-element query.
    */
   protected buildAllQueryExpression(): string {
+    return this.buildQueryExpression("all");
+  }
+
+  private buildQueryExpression(kind: "single" | "all"): string {
+    const prefix = kind === "single" ? "findBy" : "findAllBy";
+
     switch (this.selector.type) {
       case "testId":
-        return `globalThis.__RN_DRIVER__.viewTree.findAllByTestId(${JSON.stringify(this.selector.value)})`;
+        return buildHarnessCall(`viewTree.${prefix}TestId`, JSON.stringify(this.selector.value));
       case "text":
-        return `globalThis.__RN_DRIVER__.viewTree.findAllByText(${JSON.stringify(this.selector.value)}, ${this.selector.exact})`;
+        return buildHarnessCall(
+          `viewTree.${prefix}Text`,
+          `${JSON.stringify(this.selector.value)}, ${this.selector.exact}`,
+        );
       case "role": {
         const nameArg =
           this.selector.name !== undefined ? JSON.stringify(this.selector.name) : "undefined";
-        return `globalThis.__RN_DRIVER__.viewTree.findAllByRole(${JSON.stringify(this.selector.value)}, ${nameArg})`;
+        return buildHarnessCall(
+          `viewTree.${prefix}Role`,
+          `${JSON.stringify(this.selector.value)}, ${nameArg}`,
+        );
       }
     }
+  }
+
+  protected async evaluateAllElements(): Promise<NativeResult<ElementInfo[]>> {
+    const expr = this.buildAllQueryExpression();
+    return this.device.evaluate<NativeResult<ElementInfo[]>>(expr);
+  }
+
+  protected selectElementFromList(
+    elements: ElementInfo[],
+    index: number | undefined,
+    context: { emptySuffix: string; boundsSuffix: string },
+  ): NativeResult<ElementInfo> {
+    if (elements.length === 0) {
+      return {
+        success: false,
+        error: `No elements found${context.emptySuffix} for ${this.toString()}`,
+        code: "NOT_FOUND",
+      };
+    }
+
+    const targetIndex = index ?? 0;
+    const actualIndex = targetIndex < 0 ? elements.length + targetIndex : targetIndex;
+
+    if (actualIndex < 0 || actualIndex >= elements.length) {
+      return {
+        success: false,
+        error: `Index ${targetIndex} out of bounds (found ${elements.length} elements${context.boundsSuffix})`,
+        code: "NOT_FOUND",
+      };
+    }
+
+    return { success: true, data: elements[actualIndex] };
   }
 }
 
@@ -569,52 +585,10 @@ class ScopedLocatorImpl extends LocatorImpl {
 
     // Filter to elements within parent bounds
     const filtered = this.filterByParent(result.data, parentContext);
-
-    if (filtered.length === 0) {
-      return {
-        success: false,
-        error: `No elements found within parent for ${this.toString()}`,
-        code: "NOT_FOUND",
-      };
-    }
-
-    // Apply index selection
-    const index = this.selector.index;
-    const targetIndex = index ?? 0;
-    const actualIndex = targetIndex < 0 ? filtered.length + targetIndex : targetIndex;
-
-    if (actualIndex < 0 || actualIndex >= filtered.length) {
-      return {
-        success: false,
-        error: `Index ${targetIndex} out of bounds (found ${filtered.length} elements in parent)`,
-        code: "NOT_FOUND",
-      };
-    }
-
-    return { success: true, data: filtered[actualIndex] };
-  }
-
-  /**
-   * Override chaining to maintain scoped context.
-   */
-  override getByTestId(testId: string): Locator {
-    return new ScopedLocatorImpl(this.device, { type: "testId", value: testId }, this);
-  }
-
-  override getByText(text: string, options?: { exact?: boolean }): Locator {
-    return new ScopedLocatorImpl(
-      this.device,
-      { type: "text", value: text, exact: options?.exact ?? false },
-      this,
-    );
-  }
-
-  override getByRole(role: string, options?: { name?: string }): Locator {
-    const selector: LocatorSelector = { type: "role", value: role };
-    if (options?.name !== undefined) {
-      selector.name = options.name;
-    }
-    return new ScopedLocatorImpl(this.device, selector, this);
+    return this.selectElementFromList(filtered, this.selector.index, {
+      emptySuffix: " within parent",
+      boundsSuffix: " in parent",
+    });
   }
 
   /**
@@ -644,6 +618,14 @@ class ScopedLocatorImpl extends LocatorImpl {
  */
 export function createLocator(device: Evaluator, selector: LocatorSelector): Locator {
   return new LocatorImpl(device, selector);
+}
+
+export function buildRoleSelector(role: string, options?: { name?: string }): LocatorSelector {
+  const selector: LocatorSelector = { type: "role", value: role };
+  if (options?.name !== undefined) {
+    selector.name = options.name;
+  }
+  return selector;
 }
 
 /**

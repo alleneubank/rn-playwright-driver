@@ -1,4 +1,20 @@
+import type { ElementBounds } from "@0xbigboss/rn-driver-shared-types";
+import type {
+  Capabilities,
+  DriverEvent,
+  TracingOptions,
+  WindowMetrics,
+} from "../harness/shared-types";
 import type { TargetSelectionOptions } from "./cdp/discovery";
+
+export type { ElementBounds } from "@0xbigboss/rn-driver-shared-types";
+export type {
+  Capabilities,
+  DriverEvent,
+  DriverEventType,
+  TracingOptions,
+  WindowMetrics,
+} from "../harness/shared-types";
 
 export type DeviceOptions = {
   /** Metro bundler URL (default: 'http://localhost:8081') */
@@ -22,33 +38,10 @@ export interface WaitForOptions {
 
 // --- Capabilities detection ---
 
-/** Capabilities reported by the harness */
-export interface Capabilities {
-  /** Native view tree module available */
-  viewTree: boolean;
-  /** Native screenshot module available */
-  screenshot: boolean;
-  /** Native lifecycle module available */
-  lifecycle: boolean;
-  /** Native touch injector module available */
-  touchNative: boolean;
-}
-
 // --- Harness loading modes ---
 
 /** How to load the test harness in the app */
 export type HarnessLoadMode = "always" | "dev-only" | "explicit";
-
-export type ElementBounds = {
-  /** X position in logical points (not pixels) */
-  x: number;
-  /** Y position in logical points */
-  y: number;
-  /** Width in logical points */
-  width: number;
-  /** Height in logical points */
-  height: number;
-};
 
 export type Point = {
   /** X position in logical points (not pixels) */
@@ -114,29 +107,6 @@ export type SwipeOptions = TimingOptions &
 
 export type TouchBackendType = "xctest" | "instrumentation" | "native-module" | "cli";
 
-// --- Window Metrics ---
-
-/**
- * Window metrics for layout assertions and coordinate calculations.
- * All dimensions are in logical points (not physical pixels).
- */
-export type WindowMetrics = {
-  /** Screen width in logical points */
-  width: number;
-  /** Screen height in logical points */
-  height: number;
-  /** Device pixel ratio */
-  pixelRatio: number;
-  /** Alias for pixelRatio (matches RN PixelRatio.get()) */
-  scale: number;
-  /** Font scale factor (for accessibility) */
-  fontScale: number;
-  /** Current screen orientation */
-  orientation: "portrait" | "landscape";
-  /** Safe area insets (if available via react-native-safe-area-context or similar) */
-  safeAreaInsets?: { top: number; right: number; bottom: number; left: number };
-};
-
 // --- Touch Backend Info ---
 
 /**
@@ -152,38 +122,6 @@ export type TouchBackendInfo = {
 };
 
 // --- Tracing ---
-
-/**
- * Driver event types for tracing.
- */
-export type DriverEventType =
-  | "pointer:down"
-  | "pointer:move"
-  | "pointer:up"
-  | "pointer:tap"
-  | "locator:find"
-  | "locator:tap"
-  | "evaluate"
-  | "console"
-  | "error";
-
-/**
- * A traced event from the driver.
- */
-export type DriverEvent = {
-  /** Event type */
-  type: DriverEventType;
-  /** Timestamp when event occurred */
-  timestamp: number;
-} & ({ /** Event-specific data */ data: Record<string, unknown> } | { data?: undefined });
-
-/**
- * Tracing options.
- */
-export type TracingOptions = {
-  /** Include console logs in trace (default: false) */
-  includeConsole?: boolean;
-};
 
 // --- Pointer Path Options ---
 

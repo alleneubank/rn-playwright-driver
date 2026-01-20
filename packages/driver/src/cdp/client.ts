@@ -41,6 +41,8 @@ export class CDPClient {
   private reconnectAttempts = 0;
   private isReconnecting = false;
   private targetInfo: { id?: string; url?: string } = {};
+  private awaitPromiseChecked = false;
+  private supportsAwaitPromise = false;
 
   constructor(options: CDPClientOptions = {}) {
     this.options = {
@@ -87,6 +89,7 @@ export class CDPClient {
     this.ws.on("error", this.handleError.bind(this));
 
     await this.send("Runtime.enable", {});
+    await this.detectAwaitPromiseSupport();
   }
 
   async disconnect(): Promise<void> {
@@ -115,6 +118,34 @@ export class CDPClient {
   }
 
   async evaluate<T>(expression: string): Promise<T> {
+    if (this.supportsAwaitPromise) {
+      return this.evaluateWithAwaitPromise<T>(expression);
+    }
+    return this.evaluateWithStash<T>(expression);
+  }
+
+  private async evaluateWithAwaitPromise<T>(expression: string): Promise<T> {
+    const wrappedExpression = `
+      (async function() {
+        return eval(${JSON.stringify(expression)});
+      })()
+    `;
+
+    const result = await this.send("Runtime.evaluate", {
+      expression: wrappedExpression,
+      returnByValue: true,
+      awaitPromise: true,
+    });
+
+    if (result.exceptionDetails) {
+      throw new Error(this.formatEvaluateError(expression, result.exceptionDetails));
+    }
+
+    const value = result.result?.value as T | undefined;
+    return value as T;
+  }
+
+  private async evaluateWithStash<T>(expression: string): Promise<T> {
     const resultId = `__CDP_RESULT_${Date.now()}_${Math.random().toString(36).slice(2)}`;
 
     // Detect if expression is a single expression or multiple statements.
@@ -151,17 +182,7 @@ export class CDPClient {
       returnByValue: true,
     });
     if (result.exceptionDetails) {
-      const text =
-        result.exceptionDetails.text ??
-        result.exceptionDetails.exception?.description ??
-        "Unknown error";
-      const exprSnippet = expression.length > 100 ? `${expression.slice(0, 100)}...` : expression;
-      const targetDesc = this.targetInfo.url
-        ? ` [target: ${this.targetInfo.url}]`
-        : this.targetInfo.id
-          ? ` [target: ${this.targetInfo.id}]`
-          : "";
-      throw new Error(`CDP evaluate failed: ${text}${targetDesc}\nExpression: ${exprSnippet}`);
+      throw new Error(this.formatEvaluateError(expression, result.exceptionDetails));
     }
 
     type EvaluatePayload =
@@ -183,6 +204,41 @@ export class CDPClient {
     }
 
     return (payload.hasValue ? payload.value : undefined) as T;
+  }
+
+  private async detectAwaitPromiseSupport(): Promise<void> {
+    if (this.awaitPromiseChecked) return;
+    this.awaitPromiseChecked = true;
+
+    try {
+      const result = await this.send("Runtime.evaluate", {
+        expression: "Promise.resolve(1)",
+        returnByValue: true,
+        awaitPromise: true,
+      });
+      if (result.exceptionDetails) {
+        this.supportsAwaitPromise = false;
+        return;
+      }
+      this.supportsAwaitPromise = true;
+    } catch {
+      this.supportsAwaitPromise = false;
+    }
+  }
+
+  private formatEvaluateError(
+    expression: string,
+    exceptionDetails: CDPResult["exceptionDetails"],
+  ): string {
+    const text =
+      exceptionDetails?.text ?? exceptionDetails?.exception?.description ?? "Unknown error";
+    const exprSnippet = expression.length > 100 ? `${expression.slice(0, 100)}...` : expression;
+    const targetDesc = this.targetInfo.url
+      ? ` [target: ${this.targetInfo.url}]`
+      : this.targetInfo.id
+        ? ` [target: ${this.targetInfo.id}]`
+        : "";
+    return `CDP evaluate failed: ${text}${targetDesc}\nExpression: ${exprSnippet}`;
   }
 
   /**

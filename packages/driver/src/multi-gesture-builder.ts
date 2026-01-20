@@ -1,5 +1,6 @@
 import type { GestureExecutor } from "./gesture-builder";
 import { GestureBuilderImpl } from "./gesture-builder";
+import { dispatchPlannedEvent } from "./gesture-dispatch";
 import type { GestureBuilder, MultiGestureBuilder, PlannedPointerEvent } from "./types";
 
 type ScheduledEvent = {
@@ -63,53 +64,6 @@ export class MultiGestureBuilderImpl implements MultiGestureBuilder {
   }
 
   private async dispatchEvent(event: PlannedPointerEvent): Promise<void> {
-    switch (event.type) {
-      case "down":
-        if (event.x === undefined || event.y === undefined) {
-          throw new Error("Planned down event is missing coordinates.");
-        }
-        await this.executor.down(
-          event.x,
-          event.y,
-          buildPointerOptions(event.pointerId, event.pressure),
-        );
-        return;
-      case "move":
-        if (event.x === undefined || event.y === undefined) {
-          throw new Error("Planned move event is missing coordinates.");
-        }
-        await this.executor.move(event.x, event.y, buildPointerOptions(event.pointerId, undefined));
-        return;
-      case "up":
-        await this.executor.up(buildPointerOptions(event.pointerId, event.pressure));
-        return;
-      case "wait":
-        if (event.ms === undefined) {
-          throw new Error("Planned wait event is missing duration.");
-        }
-        await this.executor.wait(event.ms);
-        return;
-      default: {
-        const exhaustive: never = event.type;
-        throw new Error(`Unhandled planned event: ${exhaustive}`);
-      }
-    }
+    await dispatchPlannedEvent(this.executor, event);
   }
-}
-
-function buildPointerOptions(
-  pointerId?: number,
-  pressure?: number,
-): { pointerId?: number; pressure?: number } | undefined {
-  if (pointerId === undefined && pressure === undefined) {
-    return undefined;
-  }
-  const options: { pointerId?: number; pressure?: number } = {};
-  if (pointerId !== undefined) {
-    options.pointerId = pointerId;
-  }
-  if (pressure !== undefined) {
-    options.pressure = pressure;
-  }
-  return options;
 }

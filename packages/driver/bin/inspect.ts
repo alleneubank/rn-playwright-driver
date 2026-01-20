@@ -26,21 +26,9 @@
  */
 
 import { parseArgs } from "node:util";
+import type { ElementBounds, ElementInfo, NativeResult } from "@0xbigboss/rn-driver-shared-types";
 // Import from dist (built output) since src is not shipped in the package
 import { createDevice, type RNDeviceOptions } from "../dist/index.mjs";
-
-type ElementInfo = {
-  handle: string;
-  testId: string | null;
-  text: string | null;
-  role: string | null;
-  label: string | null;
-  bounds: { x: number; y: number; width: number; height: number };
-  visible: boolean;
-  enabled: boolean;
-};
-
-type NativeResult<T> = { success: true; data: T } | { success: false; error: string; code: string };
 
 function printHelp(): void {
   console.log(`
@@ -73,7 +61,7 @@ Examples:
 `);
 }
 
-function formatBounds(bounds: { x: number; y: number; width: number; height: number }): string {
+function formatBounds(bounds: ElementBounds): string {
   return `(${bounds.x}, ${bounds.y}) ${bounds.width}x${bounds.height}`;
 }
 
@@ -142,10 +130,13 @@ async function main(): Promise<void> {
       } else {
         console.log("\nHarness Info:");
         console.log(`  version: ${version}`);
+        console.log(`  apiVersion: ${caps.apiVersion}`);
         console.log(`  platform: ${platform}`);
         console.log("\nCapabilities:");
         console.log(`  viewTree: ${caps.viewTree}`);
+        console.log(`  viewTreeTap: ${caps.viewTreeTap}`);
         console.log(`  screenshot: ${caps.screenshot}`);
+        console.log(`  screenshotCaptureElement: ${caps.screenshotCaptureElement}`);
         console.log(`  lifecycle: ${caps.lifecycle}`);
         console.log(`  touchNative: ${caps.touchNative}`);
 

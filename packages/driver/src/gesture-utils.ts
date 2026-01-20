@@ -24,23 +24,25 @@ export function resolveInterpolation(
   const hasSteps = options?.steps !== undefined;
 
   if (hasDuration) {
-    const duration = Math.max(0, options?.duration ?? 0);
-    if (duration <= 0) {
-      return { steps: 1, easing, stepDelayMs: 0 };
-    }
-    const steps = Math.max(1, Math.round(duration / DEFAULT_FRAME_MS));
-    return { steps, easing, stepDelayMs: duration / steps };
+    return resolveDurationInterpolation(options?.duration ?? 0, easing);
   }
 
   if (!hasSteps && defaults.duration !== undefined) {
-    const duration = Math.max(0, defaults.duration);
-    if (duration <= 0) {
-      return { steps: 1, easing, stepDelayMs: 0 };
-    }
-    const steps = Math.max(1, Math.round(duration / DEFAULT_FRAME_MS));
-    return { steps, easing, stepDelayMs: duration / steps };
+    return resolveDurationInterpolation(defaults.duration, easing);
   }
 
   const steps = Math.max(1, options?.steps ?? defaults.steps);
   return { steps, easing, stepDelayMs: null };
+}
+
+function resolveDurationInterpolation(
+  duration: number,
+  easing: (t: number) => number,
+): ResolvedInterpolation {
+  const clamped = Math.max(0, duration);
+  if (clamped <= 0) {
+    return { steps: 1, easing, stepDelayMs: 0 };
+  }
+  const steps = Math.max(1, Math.round(clamped / DEFAULT_FRAME_MS));
+  return { steps, easing, stepDelayMs: clamped / steps };
 }

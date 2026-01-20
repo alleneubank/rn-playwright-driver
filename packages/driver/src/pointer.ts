@@ -260,9 +260,10 @@ export class Pointer {
    * Pinch gesture with two fingers.
    */
   async pinch(options: PinchOptions): Promise<void> {
-    const holdStart = Math.max(0, options.holdStart ?? DEFAULT_FRAME_MS);
-    const holdEnd = Math.max(0, options.holdEnd ?? DEFAULT_FRAME_MS);
-    const multi = this.multiGesture();
+    const { holdStart, holdEnd, multi } = this.createTwoFingerGesture(
+      options.holdStart,
+      options.holdEnd,
+    );
 
     const startOffset = options.startDistance / 2;
     const endOffset = options.endDistance / 2;
@@ -272,11 +273,7 @@ export class Pointer {
     const leftEnd = { x: options.center.x - endOffset, y: options.center.y };
     const rightEnd = { x: options.center.x + endOffset, y: options.center.y };
 
-    const interpolation: InterpolationOptions = {
-      steps: options.steps ?? DEFAULT_PINCH_STEPS,
-      ...(options.duration !== undefined && { duration: options.duration }),
-      ...(options.easing !== undefined && { easing: options.easing }),
-    };
+    const interpolation = this.buildInterpolationOptions(options, DEFAULT_PINCH_STEPS);
 
     multi
       .pointer(0)
@@ -301,9 +298,10 @@ export class Pointer {
    * Two-finger rotation gesture.
    */
   async rotate(options: RotateOptions): Promise<void> {
-    const holdStart = Math.max(0, options.holdStart ?? DEFAULT_FRAME_MS);
-    const holdEnd = Math.max(0, options.holdEnd ?? DEFAULT_FRAME_MS);
-    const multi = this.multiGesture();
+    const { holdStart, holdEnd, multi } = this.createTwoFingerGesture(
+      options.holdStart,
+      options.holdEnd,
+    );
 
     const startLeft = pointOnCircle(options.center, options.distance, options.startAngle);
     const startRight = pointOnCircle(
@@ -314,11 +312,7 @@ export class Pointer {
     const endLeft = pointOnCircle(options.center, options.distance, options.endAngle);
     const endRight = pointOnCircle(options.center, options.distance, options.endAngle + Math.PI);
 
-    const interpolation: InterpolationOptions = {
-      steps: options.steps ?? DEFAULT_ROTATE_STEPS,
-      ...(options.duration !== undefined && { duration: options.duration }),
-      ...(options.easing !== undefined && { easing: options.easing }),
-    };
+    const interpolation = this.buildInterpolationOptions(options, DEFAULT_ROTATE_STEPS);
 
     multi
       .pointer(0)
@@ -347,23 +341,11 @@ export class Pointer {
   }
 
   private async sendDown(x: number, y: number, options?: PointerEventOptions): Promise<void> {
-    const pointerId = options?.pointerId ?? 0;
-    this.positions.set(pointerId, { x, y });
-    if (options) {
-      await this.getBackend().down(x, y, options);
-      return;
-    }
-    await this.getBackend().down(x, y);
+    await this.sendPointerPosition("down", x, y, options);
   }
 
   private async sendMove(x: number, y: number, options?: PointerEventOptions): Promise<void> {
-    const pointerId = options?.pointerId ?? 0;
-    this.positions.set(pointerId, { x, y });
-    if (options) {
-      await this.getBackend().move(x, y, options);
-      return;
-    }
-    await this.getBackend().move(x, y);
+    await this.sendPointerPosition("move", x, y, options);
   }
 
   private async sendUp(options?: PointerEventOptions): Promise<void> {
@@ -404,6 +386,57 @@ export class Pointer {
       const y = from.y + (to.y - from.y) * t;
       await this.sendMove(x, y);
     }
+  }
+
+  private async sendPointerPosition(
+    type: "down" | "move",
+    x: number,
+    y: number,
+    options?: PointerEventOptions,
+  ): Promise<void> {
+    const pointerId = options?.pointerId ?? 0;
+    this.positions.set(pointerId, { x, y });
+    const backend = this.getBackend();
+    if (options) {
+      if (type === "down") {
+        await backend.down(x, y, options);
+        return;
+      }
+      await backend.move(x, y, options);
+      return;
+    }
+    if (type === "down") {
+      await backend.down(x, y);
+      return;
+    }
+    await backend.move(x, y);
+  }
+
+  private buildInterpolationOptions(
+    options:
+      | { steps?: number; duration?: number; easing?: InterpolationOptions["easing"] }
+      | undefined,
+    defaultSteps: number,
+  ): InterpolationOptions {
+    const interpolation: InterpolationOptions = { steps: options?.steps ?? defaultSteps };
+    if (options?.duration !== undefined) {
+      interpolation.duration = options.duration;
+    }
+    if (options?.easing !== undefined) {
+      interpolation.easing = options.easing;
+    }
+    return interpolation;
+  }
+
+  private createTwoFingerGesture(
+    holdStart: number | undefined,
+    holdEnd: number | undefined,
+  ): { holdStart: number; holdEnd: number; multi: MultiGestureBuilder } {
+    return {
+      holdStart: Math.max(0, holdStart ?? DEFAULT_FRAME_MS),
+      holdEnd: Math.max(0, holdEnd ?? DEFAULT_FRAME_MS),
+      multi: this.multiGesture(),
+    };
   }
 }
 
