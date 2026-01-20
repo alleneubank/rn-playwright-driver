@@ -37,6 +37,7 @@ interface ViewTreeModuleInterface {
 	isVisible(handle: string): Promise<NativeResult<boolean>>;
 	isEnabled(handle: string): Promise<NativeResult<boolean>>;
 	refresh(handle: string): Promise<NativeResult<ElementInfo | null>>;
+	tap(handle: string): Promise<NativeResult<boolean>>;
 }
 
 const NativeModule =
@@ -133,5 +134,12 @@ export const RNDriverViewTreeModule = {
 	 */
 	refresh(handle: ElementHandle): Promise<NativeResult<ElementInfo | null>> {
 		return NativeModule.refresh(handle);
+	},
+
+	/**
+	 * Tap element by handle.
+	 */
+	tap(handle: ElementHandle): Promise<NativeResult<boolean>> {
+		return NativeModule.tap(handle);
 	},
 };

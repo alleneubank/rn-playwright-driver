@@ -26,6 +26,9 @@
 		"url": "https://github.com/0xbigboss/rn-playwright-driver",
 		"directory": "packages/view-tree"
 	},
+	"dependencies": {
+		"@0xbigboss/rn-driver-shared-types": "workspace:*"
+	},
 	"peerDependencies": {
 		"expo": "*",
 		"react": "*",

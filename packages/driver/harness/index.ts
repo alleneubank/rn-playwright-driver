@@ -8,118 +8,36 @@
  * tracing, and utility helpers.
  */
 
-/**
- * Window metrics for layout assertions and coordinate calculations.
- * All dimensions are in logical points (not physical pixels).
- */
-export type WindowMetrics = {
-  /** Screen width in logical points */
-  width: number;
-  /** Screen height in logical points */
-  height: number;
-  /** Device pixel ratio */
-  pixelRatio: number;
-  /** Alias for pixelRatio (matches RN PixelRatio.get()) */
-  scale: number;
-  /** Font scale factor (for accessibility) */
-  fontScale: number;
-  /** Current screen orientation */
-  orientation: "portrait" | "landscape";
-  /** Safe area insets (if available via react-native-safe-area-context or similar) */
-  safeAreaInsets?: { top: number; right: number; bottom: number; left: number };
-};
+import type {
+  ElementBounds,
+  ElementHandle,
+  ElementInfo,
+  NativeResult,
+} from "@0xbigboss/rn-driver-shared-types";
+import type {
+  AppState,
+  Capabilities,
+  DriverEvent,
+  DriverEventType,
+  TracingOptions,
+  WindowMetrics,
+} from "./shared-types";
 
-/**
- * Driver event types for tracing.
- */
-export type DriverEventType =
-  | "pointer:down"
-  | "pointer:move"
-  | "pointer:up"
-  | "pointer:tap"
-  | "locator:find"
-  | "locator:tap"
-  | "evaluate"
-  | "console"
-  | "error";
-
-/**
- * A traced event from the driver.
- */
-export type DriverEvent = {
-  /** Event type */
-  type: DriverEventType;
-  /** Timestamp when event occurred */
-  timestamp: number;
-} & ({ /** Event-specific data */ data: Record<string, unknown> } | { data?: undefined });
-
-/**
- * Tracing options.
- */
-export type TracingOptions = {
-  /** Include console logs in trace (default: false) */
-  includeConsole?: boolean;
-};
-
-/**
- * Bounding rectangle in logical points.
- */
-export type ElementBounds = {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-};
-
-/**
- * Element information returned from view tree queries.
- */
-export type ElementInfo = {
-  handle: string;
-  testId: string | null;
-  text: string | null;
-  role: string | null;
-  label: string | null;
-  bounds: ElementBounds;
-  visible: boolean;
-  enabled: boolean;
-};
-
-/**
- * Error codes for native module calls.
- */
-export type ErrorCode =
-  | "NOT_FOUND"
-  | "MULTIPLE_FOUND"
-  | "NOT_VISIBLE"
-  | "NOT_ENABLED"
-  | "TIMEOUT"
-  | "INTERNAL"
-  | "NOT_SUPPORTED"
-  | "INVALID_URL"
-  | "TAP_FAILED";
-
-/**
- * Standard result wrapper for native module calls.
- */
-export type NativeResult<T> =
-  | { success: true; data: T }
-  | { success: false; error: string; code: ErrorCode };
-
-/**
- * App lifecycle states.
- */
-export type AppState = "active" | "background" | "inactive";
-
-/**
- * Capability flags for feature detection.
- */
-export type Capabilities = {
-  viewTree: boolean;
-  screenshot: boolean;
-  lifecycle: boolean;
-  touchNative: boolean;
-};
+export type {
+  ElementBounds,
+  ElementHandle,
+  ElementInfo,
+  ErrorCode,
+  NativeResult,
+} from "@0xbigboss/rn-driver-shared-types";
+export type {
+  AppState,
+  Capabilities,
+  DriverEvent,
+  DriverEventType,
+  TracingOptions,
+  WindowMetrics,
+} from "./shared-types";
 
 /**
  * View tree bridge interface.
@@ -127,15 +45,15 @@ export type Capabilities = {
 export type ViewTreeBridge = {
   findByTestId: (testId: string) => Promise<NativeResult<ElementInfo>>;
   findByText: (text: string, exact?: boolean) => Promise<NativeResult<ElementInfo>>;
-  findByRole: (role: string, name?: string) => Promise<NativeResult<ElementInfo>>;
+  findByRole: (role: string, name?: string | null) => Promise<NativeResult<ElementInfo>>;
   findAllByTestId: (testId: string) => Promise<NativeResult<ElementInfo[]>>;
   findAllByText: (text: string, exact?: boolean) => Promise<NativeResult<ElementInfo[]>>;
-  findAllByRole: (role: string, name?: string) => Promise<NativeResult<ElementInfo[]>>;
-  getBounds: (handle: string) => Promise<NativeResult<ElementBounds | null>>;
-  isVisible: (handle: string) => Promise<NativeResult<boolean>>;
-  isEnabled: (handle: string) => Promise<NativeResult<boolean>>;
-  refresh: (handle: string) => Promise<NativeResult<ElementInfo | null>>;
-  tap: (handle: string) => Promise<NativeResult<boolean>>;
+  findAllByRole: (role: string, name?: string | null) => Promise<NativeResult<ElementInfo[]>>;
+  getBounds: (handle: ElementHandle) => Promise<NativeResult<ElementBounds | null>>;
+  isVisible: (handle: ElementHandle) => Promise<NativeResult<boolean>>;
+  isEnabled: (handle: ElementHandle) => Promise<NativeResult<boolean>>;
+  refresh: (handle: ElementHandle) => Promise<NativeResult<ElementInfo | null>>;
+  tap: (handle: ElementHandle) => Promise<NativeResult<boolean>>;
 };
 
 /**
@@ -143,7 +61,7 @@ export type ViewTreeBridge = {
  */
 export type ScreenshotBridge = {
   captureScreen: () => Promise<NativeResult<string>>;
-  captureElement: (handle: string) => Promise<NativeResult<string>>;
+  captureElement: (handle: ElementHandle) => Promise<NativeResult<string>>;
   captureRegion: (bounds: ElementBounds) => Promise<NativeResult<string>>;
 };
 
@@ -280,13 +198,19 @@ function tryRequireNativeModule<T>(moduleName: string): T | null {
 const MODULE_INSTALL_INSTRUCTIONS: Record<string, string> = {
   RNDriverViewTree:
     "RNDriverViewTree module not installed. Install @0xbigboss/rn-driver-view-tree and rebuild your app.",
+  "RNDriverViewTree.tap":
+    "RNDriverViewTree.tap not available. Update @0xbigboss/rn-driver-view-tree and rebuild your app.",
   RNDriverScreenshot:
     "RNDriverScreenshot module not installed. Install @0xbigboss/rn-driver-screenshot and rebuild your app.",
+  "RNDriverScreenshot.captureElement":
+    "RNDriverScreenshot.captureElement not available. Update @0xbigboss/rn-driver-screenshot and rebuild your app.",
   RNDriverLifecycle:
     "RNDriverLifecycle module not installed. Install @0xbigboss/rn-driver-lifecycle and rebuild your app.",
   RNDriverTouchInjector:
     "RNDriverTouchInjector module not installed. Install @0xbigboss/rn-driver-touch and rebuild your app.",
 };
+
+const HARNESS_API_VERSION = 1;
 
 /**
  * Create error result for unavailable modules.
@@ -355,23 +279,11 @@ function installHarness(): void {
   }
 
   // Try to load native modules
-  type ViewTreeNative = {
-    findByTestId: (testId: string) => Promise<NativeResult<ElementInfo>>;
-    findByText: (text: string, exact: boolean) => Promise<NativeResult<ElementInfo>>;
-    findByRole: (role: string, name: string | null) => Promise<NativeResult<ElementInfo>>;
-    findAllByTestId: (testId: string) => Promise<NativeResult<ElementInfo[]>>;
-    findAllByText: (text: string, exact: boolean) => Promise<NativeResult<ElementInfo[]>>;
-    findAllByRole: (role: string, name: string | null) => Promise<NativeResult<ElementInfo[]>>;
-    getBounds: (handle: string) => Promise<NativeResult<ElementBounds | null>>;
-    isVisible: (handle: string) => Promise<NativeResult<boolean>>;
-    isEnabled: (handle: string) => Promise<NativeResult<boolean>>;
-    refresh: (handle: string) => Promise<NativeResult<ElementInfo | null>>;
-    tap: (handle: string) => Promise<NativeResult<boolean>>;
-  };
+  type ViewTreeNative = ViewTreeBridge;
 
   type ScreenshotNative = {
     captureScreen: () => Promise<NativeResult<string>>;
-    captureElement: (handle: string) => Promise<NativeResult<string>>;
+    captureElement: (handle: ElementHandle) => Promise<NativeResult<string>>;
     captureRegion: (
       x: number,
       y: number,
@@ -380,33 +292,16 @@ function installHarness(): void {
     ) => Promise<NativeResult<string>>;
   };
 
-  type LifecycleNative = {
-    openURL: (url: string) => Promise<NativeResult<void>>;
-    reload: () => Promise<NativeResult<void>>;
-    background: () => Promise<NativeResult<void>>;
-    foreground: () => Promise<NativeResult<void>>;
-    getState: () => Promise<NativeResult<AppState>>;
-  };
-  type TouchNativeModule = {
-    tap: (x: number, y: number) => Promise<NativeResult<void>>;
-    down: (x: number, y: number) => Promise<NativeResult<void>>;
-    move: (x: number, y: number) => Promise<NativeResult<void>>;
-    up: () => Promise<NativeResult<void>>;
-    swipe: (
-      fromX: number,
-      fromY: number,
-      toX: number,
-      toY: number,
-      durationMs: number,
-    ) => Promise<NativeResult<void>>;
-    longPress: (x: number, y: number, durationMs: number) => Promise<NativeResult<void>>;
-    typeText: (text: string) => Promise<NativeResult<void>>;
-  };
+  type LifecycleNative = LifecycleBridge;
+  type TouchNativeModule = TouchNativeBridge;
 
   const viewTreeNative = tryRequireNativeModule<ViewTreeNative>("RNDriverViewTree");
   const screenshotNative = tryRequireNativeModule<ScreenshotNative>("RNDriverScreenshot");
   const lifecycleNative = tryRequireNativeModule<LifecycleNative>("RNDriverLifecycle");
   const touchNativeModule = tryRequireNativeModule<TouchNativeModule>("RNDriverTouchInjector");
+
+  const viewTreeTapSupported = typeof viewTreeNative?.tap === "function";
+  const screenshotCaptureElementSupported = typeof screenshotNative?.captureElement === "function";
 
   // Create bridges with fallback error handling and tracing
   const viewTree: ViewTreeBridge = viewTreeNative
@@ -439,8 +334,11 @@ function installHarness(): void {
         isVisible: (handle) => viewTreeNative.isVisible(handle),
         isEnabled: (handle) => viewTreeNative.isEnabled(handle),
         refresh: (handle) => viewTreeNative.refresh(handle),
-        tap: (handle) => {
+        tap: async (handle) => {
           traceEvent("locator:tap", { handle });
+          if (!viewTreeTapSupported) {
+            return notSupportedResult("RNDriverViewTree.tap");
+          }
           return viewTreeNative.tap(handle);
         },
       }
@@ -481,24 +379,15 @@ function installHarness(): void {
 
   // captureElement uses native captureElement when available (shared handle registry),
   // with fallback to viewTree.getBounds + captureRegion for older installations
-  const captureElementBridge = async (handle: string): Promise<NativeResult<string>> => {
+  const captureElementFallback = async (handle: ElementHandle): Promise<NativeResult<string>> => {
     if (!screenshotNative) {
       return notSupportedResult("RNDriverScreenshot");
     }
 
-    // Try native captureElement first (uses shared handle registry with view-tree module)
-    const nativeResult = await screenshotNative.captureElement(handle);
-    if (nativeResult.success) {
-      return nativeResult;
+    if (typeof screenshotNative.captureRegion !== "function") {
+      return notSupportedResult("RNDriverScreenshot");
     }
 
-    // If native captureElement failed with NOT_SUPPORTED (old module version), fall back
-    // Otherwise return the error (e.g., NOT_FOUND means stale handle)
-    if (!nativeResult.success && nativeResult.code !== "NOT_SUPPORTED") {
-      return nativeResult;
-    }
-
-    // Fallback: use viewTree.getBounds + captureRegion
     if (!viewTreeNative) {
       return notSupportedResult("RNDriverViewTree");
     }
@@ -518,6 +407,30 @@ function installHarness(): void {
     }
 
     return screenshotNative.captureRegion(bounds.x, bounds.y, bounds.width, bounds.height);
+  };
+
+  const captureElementBridge = async (handle: ElementHandle): Promise<NativeResult<string>> => {
+    if (!screenshotNative) {
+      return notSupportedResult("RNDriverScreenshot");
+    }
+
+    if (!screenshotCaptureElementSupported) {
+      return captureElementFallback(handle);
+    }
+
+    // Try native captureElement first (uses shared handle registry with view-tree module)
+    const nativeResult = await screenshotNative.captureElement(handle);
+    if (nativeResult.success) {
+      return nativeResult;
+    }
+
+    // If native captureElement failed with NOT_SUPPORTED (old module version), fall back
+    // Otherwise return the error (e.g., NOT_FOUND means stale handle)
+    if (!nativeResult.success && nativeResult.code !== "NOT_SUPPORTED") {
+      return nativeResult;
+    }
+
+    return captureElementFallback(handle);
   };
 
   const screenshot: ScreenshotBridge = screenshotNative
@@ -583,8 +496,11 @@ function installHarness(): void {
       };
 
   const capabilities: Capabilities = {
+    apiVersion: HARNESS_API_VERSION,
     viewTree: viewTreeNative !== null,
+    viewTreeTap: viewTreeTapSupported,
     screenshot: screenshotNative !== null,
+    screenshotCaptureElement: screenshotCaptureElementSupported,
     lifecycle: lifecycleNative !== null,
     touchNative: touchNativeModule !== null,
   };
